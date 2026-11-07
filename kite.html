@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buy in Kite</title>
+<meta name="description" content="Open tomorrow's STR100 buys in Zerodha Kite with one tap.">
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f6f6f4; --surface:#fcfcfb; --surface-2:#f0efec; --border:#e4e3df;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#8a8984;
+  --accent:#2a78d6; --accent-ink:#ffffff;
+  --good:#0f8a4b; --good-bg:#e5f4ec; --warn:#a86b00; --warn-bg:#fdf3dc;
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#111110; --surface:#1a1a19; --surface-2:#232321; --border:#2e2d2b;
+    --text:#f0efec; --text-2:#c3c2b7; --muted:#8d8c86;
+    --accent:#3987e5; --accent-ink:#ffffff;
+    --good:#3fbf7f; --good-bg:#16301f; --warn:#e0a63a; --warn-bg:#352a12;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#111110; --surface:#1a1a19; --surface-2:#232321; --border:#2e2d2b;
+  --text:#f0efec; --text-2:#c3c2b7; --muted:#8d8c86;
+  --accent:#3987e5; --accent-ink:#ffffff;
+  --good:#3fbf7f; --good-bg:#16301f; --warn:#e0a63a; --warn-bg:#352a12;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:560px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;line-height:1.2;margin:0 0 4px;letter-spacing:-.02em}
+.sub{color:var(--text-2);font-size:13px;margin-bottom:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)}
+.list li:last-child{border-bottom:0}
+.sym{font-weight:600;word-break:break-all}
+.qty{font-variant-numeric:tabular-nums;color:var(--text-2);white-space:nowrap}
+.note{font-size:13px;color:var(--text-2);margin:10px 0 0}
+.big{display:block;width:100%;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:700;font-size:17px;padding:15px 16px;cursor:pointer}
+.big:disabled{opacity:.45;cursor:not-allowed}
+.tick{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;color:var(--text-2);margin:12px 0 2px;cursor:pointer}
+.tick input{width:17px;height:17px;margin-top:1px;accent-color:var(--accent)}
+.banner{border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;font-weight:500}
+.banner.good{background:var(--good-bg);color:var(--text);border:1px solid var(--good)}
+.banner.neutral{background:var(--surface-2);color:var(--text);border:1px solid var(--border)}
+.setup h2{font-size:15px;margin:0 0 6px}
+.setup p{font-size:13px;color:var(--text-2);margin:0 0 10px}
+.row{display:flex;gap:8px}
+.row input{flex:1;min-width:0;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text)}
+.btn{border:1px solid var(--border);background:var(--surface-2);color:var(--text);font:inherit;font-weight:600;padding:10px 14px;border-radius:10px;cursor:pointer}
+.link{background:none;border:0;padding:0;color:var(--accent);font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
+.warn{background:var(--warn-bg);border:1px solid var(--warn);border-radius:12px;padding:12px 14px;font-size:13.5px}
+.empty{color:var(--text-2);text-align:center;padding:28px 12px}
+.hidden{display:none!important}
+.foot{font-size:12px;color:var(--muted);margin-top:18px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛒 Buy in Kite</h1>
+  <div class="sub" id="sub">STR100 bot · one tap, then confirm in Kite</div>
+
+  <div id="status" class="banner hidden"></div>
+
+  <div id="setup" class="card setup hidden">
+    <h2>One-time setup</h2>
+    <p>Paste the <b>API key</b> of your free Kite Personal app. The API key is not secret (only the API secret is), and it stays on this device.</p>
+    <form class="row" id="keyForm">
+      <input id="keyIn" autocomplete="off" spellcheck="false" placeholder="Paste your Kite Personal app API key" aria-label="Kite API key">
+      <button class="btn" type="submit">Save</button>
+    </form>
+  </div>
+
+  <div id="orders" class="hidden">
+    <div class="card">
+      <ul class="list" id="list"></ul>
+      <p class="note">After-market orders (AMO). They buy at the 9:15 opening price.</p>
+      <label class="tick"><input type="checkbox" id="regular"> Use regular order instead (market is open now)</label>
+    </div>
+    <button class="big" id="go">Open in Kite and confirm</button>
+    <p class="note" style="text-align:center"><button class="link" id="changeKey" type="button">Change key</button></p>
+    <div class="warn">🛡️ GTT stop-losses are not part of this basket. Set each stop at <b>10% below your buy price</b> after buying. The 9:37 am message will remind you.</div>
+  </div>
+
+  <div id="empty" class="card empty hidden">No buys right now. Open this from the bot's evening report.</div>
+
+  <div class="foot">You always confirm the orders yourself inside Kite. Nothing is placed without your tap.</div>
+</div>
+
+<form id="kiteForm" method="post" action="https://kite.zerodha.com/connect/basket" class="hidden">
+  <input type="hidden" name="api_key" id="fKey">
+  <input type="hidden" name="data" id="fData">
+</form>
+
+<script>
+const $ = s => document.querySelector(s);
+const KEY = "str100kitekey";
+const HAS_STATUS = new URLSearchParams(location.search).has("status");
+const getKey = () => { try { return localStorage.getItem(KEY) || ""; } catch { return ""; } };
+const setKey = v => { try { v ? localStorage.setItem(KEY, v) : localStorage.removeItem(KEY); } catch {} };
+
+function parseOrders() {
+  const h = location.hash.replace(/^#/, "");
+  const out = { orders: [], date: null };
+  if (!h) return out;
+  for (const part of h.split("&")) {
+    const i = part.indexOf("=");
+    if (i < 0) continue;
+    const k = part.slice(0, i), v = part.slice(i + 1);
+    if (k === "d" && /^\d{4}-\d{2}-\d{2}$/.test(v)) out.date = v;
+    if (k === "o") {
+      for (const item of v.split(",")) {
+        let s;
+        try { s = decodeURIComponent(item); } catch { continue; }
+        const j = s.lastIndexOf(":");
+        if (j < 1) continue;
+        const sym = s.slice(0, j).toUpperCase(), qty = s.slice(j + 1);
+        if (!/^[A-Z0-9&-]{1,30}$/.test(sym) || !/^[1-9]\d{0,6}$/.test(qty)) continue;
+        if (out.orders.some(o => o.sym === sym)) continue;
+        out.orders.push({ sym, qty: parseInt(qty, 10) });
+        if (out.orders.length >= 10) break;
+      }
+    }
+  }
+  return out;
+}
+
+function showStatus() {
+  const q = new URLSearchParams(location.search);
+  const st = q.get("status");
+  if (!st) return;
+  const b = $("#status");
+  b.classList.remove("hidden");
+  if (st === "success") {
+    b.className = "banner good";
+    b.textContent = "Orders sent to Kite ✅. Now place your GTT stop-losses (the 9:37 am message will remind you).";
+  } else {
+    b.className = "banner neutral";
+    b.textContent = st === "cancelled" ? "No orders were placed. You cancelled in Kite." : "Kite returned: " + st + ". Please check your orders in Kite.";
+  }
+  // remove token-like params from the address bar
+  try { history.replaceState(null, "", location.pathname + location.hash); } catch {}
+}
+
+function render() {
+  const { orders, date } = parseOrders();
+  const key = getKey();
+  if (!orders.length) {
+    if (!HAS_STATUS) $("#empty").classList.remove("hidden");
+    if (!key) $("#setup").classList.remove("hidden");
+    return;
+  }
+  if (date) {
+    const d = new Date(date + "T00:00:00");
+    if (!isNaN(d)) $("#sub").textContent = "Signals from " + d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }) + " · tap once, then confirm in Kite";
+  }
+  $("#list").innerHTML = "";
+  for (const o of orders) {
+    const li = document.createElement("li");
+    const a = document.createElement("span"); a.className = "sym"; a.textContent = o.sym;
+    const b = document.createElement("span"); b.className = "qty"; b.textContent = o.qty + " shares";
+    li.append(a, b); $("#list").append(li);
+  }
+  $("#orders").classList.remove("hidden");
+  $("#setup").classList.toggle("hidden", !!key);
+  $("#go").disabled = !key;
+  $("#go").textContent = key ? `Open ${orders.length} order${orders.length > 1 ? "s" : ""} in Kite and confirm` : "Save your API key first";
+}
+
+function buildBasket(regular) {
+  return parseOrders().orders.map(o => ({
+    variety: regular ? "regular" : "amo", tradingsymbol: o.sym, exchange: "NSE",
+    transaction_type: "BUY", order_type: "MARKET", quantity: o.qty, product: "CNC", readonly: false
+  }));
+}
+
+$("#keyForm").onsubmit = e => {
+  e.preventDefault();
+  const v = $("#keyIn").value.trim();
+  if (!/^[A-Za-z0-9]{6,64}$/.test(v)) { $("#keyIn").setCustomValidity("That doesn't look like an API key"); $("#keyIn").reportValidity(); return; }
+  $("#keyIn").setCustomValidity("");
+  setKey(v); $("#keyIn").value = ""; render();
+};
+$("#keyIn").oninput = () => $("#keyIn").setCustomValidity("");
+$("#changeKey").onclick = () => { setKey(""); $("#setup").classList.remove("hidden"); render(); $("#keyIn").focus(); };
+$("#go").onclick = () => {
+  const key = getKey(), data = buildBasket($("#regular").checked);
+  if (!key || !data.length) return;
+  $("#fKey").value = key;
+  $("#fData").value = JSON.stringify(data);
+  $("#kiteForm").submit();
+};
+window.addEventListener("hashchange", render);
+showStatus();
+render();
+</script>
+</body>
+</html>
