@@ -148,7 +148,7 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
       <div class="grid insights" id="botIns"></div>
     </section>
     <section>
-      <h2>Holding now</h2><div class="h2sub">Tap a card to see the chart</div>
+      <h2>Bot's open paper trades</h2><div class="h2sub">Not your stocks. These are trades the rules would still be in today if you had followed every signal. Tap a card for the chart.</div>
       <div class="grid cards" id="openCards"></div>
     </section>
     <section>
@@ -225,7 +225,7 @@ const arrow = x => x > 0 ? "▲" : x < 0 ? "▼" : "";
 const nd = d => { if (!d) return "–"; const t = new Date(d + "T00:00:00"); return t.toLocaleDateString("en-IN", {day: "numeric", month: "short"}); };
 const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
 const daysAgo = d => (Date.now() - new Date(d + "T00:00:00")) / 864e5;
-const REASON = {stop: "Stop loss hit", stop_gap: "Opened below stop", trail: "Below 20 day avg", time: "40 days done", open: "Still holding", "you sold": "You sold"};
+const REASON = {stop: "Stop loss hit", stop_gap: "Opened below stop", trail: "Below 20 day avg", time: "40 days done", open: "Still open", "you sold": "You sold"};
 let D = null, P = null;
 
 function chartOpts(el, extra = {}) {
@@ -299,8 +299,8 @@ document.querySelectorAll("[data-collapse]").forEach(b => b.onclick = () => {
 
 /* ---------------- BOT VIEW ---------------- */
 const STATUS = {
-  taken: ["Bought", "info"], weak_market: ["Skipped · weak market", "warn"], no_slot: ["Skipped · slots full", "neutral"],
-  holding: ["Already holding", "neutral"], pending: ["Buy at next open", "good"], no_data: ["No data", "neutral"], no_cash: ["No cash", "neutral"]
+  taken: ["Bot bought", "info"], weak_market: ["Skipped · weak market", "warn"], no_slot: ["Skipped · slots full", "neutral"],
+  holding: ["Bot already in it", "neutral"], pending: ["Buy at next open", "good"], no_data: ["No data", "neutral"], no_cash: ["No cash", "neutral"]
 };
 function kpiTiles(el, tiles) { el.innerHTML = tiles.map(([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="note">${n}</div></div>`).join(""); }
 function botKpis() {
@@ -309,7 +309,7 @@ function botKpis() {
     ["Bot portfolio", inr(s.value), `<span class="${sign(s.ret)}">${arrow(s.ret)} ${pct(s.ret)}</span> since ${nd(D.equity[0]?.[0])}`],
     ["Nifty 50, same period", pct(s.nifty_ret), `Bot is <span class="${sign(s.ret - s.nifty_ret)}">${pct(s.ret - s.nifty_ret)}</span> vs Nifty`],
     ["Win rate", s.win_rate == null ? "–" : s.win_rate.toFixed(0) + "%", `${s.wins} of ${s.closed} closed · wins ${pct(s.avg_win)}, losses ${pct(s.avg_loss)}`],
-    ["Biggest fall from a high", pct(s.max_dd), `${s.open} open · ${inr(s.unrealized)} not yet booked`],
+    ["Biggest fall from a high", pct(s.max_dd), `${s.open} paper trade${s.open == 1 ? "" : "s"} still open · ${inr(s.unrealized)} not yet booked`],
   ]);
   const ok = t.pct >= D.rules.health_min;
   $("#mood").innerHTML = `<span class="pill ${ok ? "good" : "bad"}">● ${ok ? "Healthy" : "Weak"} market · ${t.pct.toFixed(0)}%</span>`;
@@ -382,7 +382,7 @@ function openCards(el, list, onOpen) {
     const prog = Math.min(100, 100 * (t.days || 0) / 40), ret = t.ret, pnl = t.pnl ?? t.pnl_inr;
     return `<div class="card oc" data-i="${i}" tabindex="0">
       <div class="top"><span class="sym">${t.symbol}</span><span class="big ${sign(ret)}">${arrow(ret)} ${pct(ret)}</span></div>
-      <div class="meta">Bought ${nd(t.entry_date)} at ${px(t.entry ?? t.entry_price)} · now ${px(t.now)}<br>${t.qty ?? "–"} shares · <span class="${sign(pnl)}">${inr(pnl)}</span> · stop ${px(t.stop)}${extra || ""}</div>
+      <div class="meta">${list.paper ? "Paper buy" : "Bought"} ${nd(t.entry_date)} at ${px(t.entry ?? t.entry_price)} · now ${px(t.now)}<br>${t.qty ?? "–"} shares · <span class="${sign(pnl)}">${inr(pnl)}</span> · stop ${px(t.stop)}${extra || ""}</div>
       <div class="bar"><i style="width:${prog}%"></i></div><div class="meta">Day ${t.days ?? 0} of 40</div></div>`;
   }).join("");
   el.querySelectorAll(".oc").forEach(c => c.onclick = c.onkeydown = e => { if (e.type === "click" || e.key === "Enter") onOpen(+c.dataset.i); });
@@ -392,20 +392,20 @@ function botTable() {
   DataTable($("#sigBody"), {
     health: true, defaultSort: "date",
     chips: [
-      {k: "taken", l: "Bought", f: t => t.status === "taken"},
-      {k: "open", l: "Holding", f: t => t.status === "taken" && !t.exit_date},
+      {k: "taken", l: "Bot bought", f: t => t.status === "taken"},
+      {k: "open", l: "Still open", f: t => t.status === "taken" && !t.exit_date},
       {k: "skipped", l: "Skipped", f: t => ["weak_market", "no_slot"].includes(t.status)},
       {k: "all", l: "All signals", f: () => true}],
-    cols: [{h: "Signal", sort: "date"}, {h: "Stock", sort: "sym"}, {h: "Health", num: 1, sort: "health"}, {h: "Result"}, {h: "Buy", num: 1},
-      {h: "Sell / now", num: 1}, {h: "Return", num: 1, sort: "ret"}, {h: "Days", num: 1, sort: "days"}, {h: "Why it ended"}],
-    sorters: {date: t => t.signal, sym: t => t.symbol, health: t => t.health, ret: t => t.ret, days: t => t.days},
+    cols: [{h: "Signal", sort: "date"}, {h: "Stock", sort: "sym"}, {h: "Health", num: 1, sort: "health"}, {h: "Result"}, {h: "Entry date", sort: "entry"}, {h: "Buy", num: 1},
+      {h: "Exit date", sort: "exit"}, {h: "Sell / now", num: 1}, {h: "Return", num: 1, sort: "ret"}, {h: "Days", num: 1, sort: "days"}, {h: "Why it ended"}],
+    sorters: {date: t => t.signal, sym: t => t.symbol, health: t => t.health, entry: t => t.entry_date || "", exit: t => t.exit_date || (t.entry_date ? "9999" : ""), ret: t => t.ret, days: t => t.days},
     rows: () => D.trades, idx: t => t._i, date: t => t.signal, ret: t => t.ret,
     open: i => openChart(D.trades[i], D.bars),
     cells: t => {
       const [st, tone] = STATUS[t.status] || [t.status, "neutral"], hypo = t.status !== "taken" && t.ret != null;
       return `<td>${nd(t.signal)}</td><td class="sym">${t.symbol}</td>
         <td class="num ${t.health >= D.rules.health_min ? "up" : "down"}">${t.health == null ? "–" : t.health.toFixed(0) + "%"}</td>
-        <td><span class="pill ${tone}">${st}</span></td><td class="num">${px(t.entry)}</td><td class="num">${px(t.exit ?? t.now)}</td>
+        <td><span class="pill ${tone}">${st}</span></td><td>${nd(t.entry_date)}</td><td class="num">${px(t.entry)}</td><td>${t.exit_date ? nd(t.exit_date) : (t.entry_date ? `<span style="color:var(--muted)">still open</span>` : "–")}</td><td class="num">${px(t.exit ?? t.now)}</td>
         <td class="num"><span class="${sign(t.ret)}">${t.ret == null ? "–" : arrow(t.ret) + " " + pct(t.ret)}</span>${hypo ? ` <span style="color:var(--muted);font-size:12px">if bought</span>` : ""}</td>
         <td class="num">${t.days ?? "–"}</td><td>${REASON[t.reason] || "–"}</td>`;
     }});
@@ -594,7 +594,7 @@ function foot() {
 }
 fetch("data.json?v=" + Date.now()).then(r => r.json()).then(d => {
   D = d; botKpis(); equityChart(); healthChart(); botInsights();
-  openCards($("#openCards"), D.trades.map((t, i) => [t, i]).filter(([t]) => t.status === "taken" && !t.exit_date), i => openChart(D.trades[i], D.bars));
+  openCards($("#openCards"), Object.assign(D.trades.map((t, i) => [t, i]).filter(([t]) => t.status === "taken" && !t.exit_date), {paper: true}), i => openChart(D.trades[i], D.bars));
   botTable(); foot();
   let v = "bot"; try { v = localStorage.getItem("str100view") || "bot"; } catch {}
   if (v === "me") showView(true);
