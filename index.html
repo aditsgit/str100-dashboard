@@ -105,6 +105,16 @@ td.num,th.num{text-align:right}
 .empty{color:var(--text-2);padding:16px}
 .foot{color:var(--muted);font-size:12.5px;margin-top:28px;line-height:1.6}
 .hidden{display:none!important}
+.setbar{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;padding:12px 16px;margin:0 0 16px}
+.setbar .grp{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.setbar .lbl{font-size:13px;color:var(--text-2);font-weight:600}
+.money{display:flex;align-items:center;border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:0 10px}
+.money input{border:0;background:transparent;color:var(--text);font:inherit;font-weight:600;width:110px;padding:7px 4px;outline:none;font-variant-numeric:tabular-nums}
+.money:focus-within{border-color:var(--accent)}
+.tick{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;cursor:pointer}
+.tick input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+.tick small{font-weight:400;color:var(--muted)}
+.feeline{font-size:12.5px;color:var(--muted);width:100%}
 .lock{max-width:420px;margin:30px auto;text-align:center}
 .lock .ic{font-size:34px}
 .lock input[type=password]{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);margin:12px 0 8px}
@@ -136,8 +146,18 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
     <button role="tab" id="tabMe" aria-selected="false">👤 My portfolio 🔒</button>
   </div>
 
+  <div class="card setbar" id="setBar">
+    <div class="grp" id="capGrp">
+      <span class="lbl">Starting money</span>
+      <label class="money"><span>₹</span><input id="capIn" inputmode="numeric" aria-label="Starting money in rupees"></label>
+      <button class="chip" data-cap="100000">1L</button><button class="chip" data-cap="500000">5L</button><button class="chip" data-cap="1000000">10L</button><button class="chip" data-cap="2500000">25L</button>
+    </div>
+    <label class="tick"><input type="checkbox" id="feeIn"> Include Zerodha charges <small>(STT, stamp duty, exchange, SEBI, GST, DP)</small></label>
+    <div class="feeline" id="feeLine"></div>
+  </div>
+
   <div id="botView">
-    <div class="h2sub">What happens if every signal is handled exactly by the rules, starting with ₹5,00,000. Simulated, not real orders.</div>
+    <div class="h2sub" id="botIntro">What happens if every signal is handled exactly by the rules. Simulated, not real orders.</div>
     <div class="grid kpis" id="kpis"></div>
     <section class="grid two">
       <div class="card"><h2>Portfolio vs Nifty 50</h2><div class="legend" id="eqLegend"></div><div class="chartbox" id="eqChart"></div></div>
@@ -297,6 +317,95 @@ document.querySelectorAll("[data-collapse]").forEach(b => b.onclick = () => {
   el.classList.toggle("hidden", h); b.textContent = h ? "Show list" : "Hide list";
 });
 
+/* ---------------- SETTINGS: starting money + Zerodha charges ---------------- */
+/* Zerodha equity delivery charges (zerodha.com/charges): brokerage 0, STT 0.1% buy & sell,
+   NSE txn 0.00307%, SEBI ₹10/crore, IPFT ₹0.01/crore, GST 18% on (txn + SEBI + IPFT),
+   stamp duty 0.015% on buy, DP ₹15.34 per stock on each sell (GST included). */
+const FEE = {stt: 0.001, txn: 0.0000307, sebi: 0.000001, ipft: 0.000000001, gst: 0.18, stamp: 0.00015, dp: 15.34};
+function fees(value, side) {
+  if (!value || value <= 0) return 0;
+  const stt = Math.round(value * FEE.stt), ex = value * (FEE.txn + FEE.sebi + FEE.ipft);
+  return stt + ex * (1 + FEE.gst) + (side === "buy" ? value * FEE.stamp : FEE.dp);
+}
+const SET = {cap: 500000, fees: false};
+try { Object.assign(SET, JSON.parse(localStorage.getItem("str100set") || "{}")); } catch {}
+function saveSet() { try { localStorage.setItem("str100set", JSON.stringify(SET)); } catch {} }
+
+/* replays the bot's own trades with your starting money (and charges if ticked) */
+function resim() {
+  if (!D._base) D._base = {stats: D.stats, equity: D.equity};
+  const cap = SET.cap, F = SET.fees, slot = cap / D.rules.slots, base = D._base;
+  D.trades.forEach(t => {
+    t._b ||= {ret: t.ret, pnl: t.pnl, qty: t.qty, now: t.now, status: t.status, exit: t.exit};
+    Object.assign(t, {ret: t._b.ret, pnl: t._b.pnl, qty: t._b.qty, now: t._b.now, status: t._b.status, exit: t._b.exit, fee: null, _done: 0, _bf: 0});
+  });
+  const pxAt = (t, d) => { const b = D.bars[t.symbol]; if (!b) return null; const k0 = b.d.indexOf(t.entry_date), j = b.d.indexOf(d); return k0 < 0 || j < 0 ? null : t.entry * b.c[j] / b.o[k0]; };
+  const taken = D.trades.filter(t => t._b.status === "taken");
+  const open = new Set(); let cash = cap, paid = 0; const eq = [];
+  base.equity.forEach(([d, , n]) => {
+    for (const t of taken) {
+      if (t._done || t.entry_date > d) continue;
+      t._done = 1;
+      const q = Math.floor(Math.min(slot, cash) / (t.entry * (F ? 1.0012 : 1)));
+      if (q <= 0) { Object.assign(t, {status: "no_cash", qty: null, pnl: null}); continue; }
+      const bf = F ? fees(q * t.entry, "buy") : 0;
+      cash -= q * t.entry + bf; paid += bf; Object.assign(t, {qty: q, _bf: bf, _last: t.entry}); open.add(t);
+    }
+    for (const t of [...open]) {
+      if (!t.exit_date || t.exit_date > d) continue;
+      const v = t.qty * t.exit, sf = F ? fees(v, "sell") : 0;
+      cash += v - sf; paid += sf; open.delete(t);
+      t.pnl = v - sf - t.qty * t.entry - t._bf; t.ret = 100 * t.pnl / (t.qty * t.entry + t._bf); t.fee = t._bf + sf;
+    }
+    let val = cash;
+    open.forEach(t => { const p = pxAt(t, d); if (p != null) t._last = p; val += t.qty * t._last; });
+    eq.push([d, val, n * cap / base.stats.capital]);
+  });
+  open.forEach(t => { t.now = t._last; t.pnl = t.qty * (t._last - t.entry) - t._bf; t.ret = 100 * t.pnl / (t.qty * t.entry + t._bf); t.fee = t._bf; });
+  /* signals the bot did not take: "if bought" return, net of charges when ticked */
+  if (F) D.trades.filter(t => t.status !== "taken" && t.status !== "no_cash" && t.ret != null && t.entry).forEach(t => {
+    const q = Math.max(1, Math.floor(slot / t.entry)), bv = q * t.entry, sv = bv * (1 + t._b.ret / 100);
+    t.ret = 100 * (sv - fees(sv, "sell") - bv - fees(bv, "buy")) / (bv + fees(bv, "buy"));
+  });
+  const closed = taken.filter(t => t.status === "taken" && t.exit_date), wins = closed.filter(t => t.ret > 0), losses = closed.filter(t => t.ret <= 0);
+  let peak = 0, dd = 0; eq.forEach(([, v]) => { peak = Math.max(peak, v); dd = Math.min(dd, v / peak - 1); });
+  const fin = eq.at(-1)?.[1] ?? cap, best = closed.reduce((a, t) => !a || t.ret > a.ret ? t : a, null);
+  D.equity = eq;
+  D.stats = Object.assign({}, base.stats, {
+    capital: cap, value: fin, ret: 100 * (fin / cap - 1), closed: closed.length, open: open.size, wins: wins.length,
+    win_rate: closed.length ? 100 * wins.length / closed.length : null,
+    avg_win: avg(wins.map(t => t.ret)), avg_loss: avg(losses.map(t => t.ret)),
+    best: best?.symbol, best_ret: best?.ret, max_dd: 100 * dd, fees: paid,
+    realized: closed.reduce((a, t) => a + t.pnl, 0), unrealized: [...open].reduce((a, t) => a + t.pnl, 0)});
+}
+function feeLine() {
+  const s = D?.stats;
+  $("#feeLine").innerHTML = SET.fees
+    ? `Charges are taken off every buy and sell, like Kite's contract note.${s && !$("#botView").classList.contains("hidden") ? ` Bot paid <b>${inr(s.fees)}</b> in charges so far.` : ""} Open trades show buy charges now; sell charges are added when sold.`
+    : "Returns shown before charges. Tick the box to see them after STT, stamp duty and other charges.";
+}
+function renderBot() {
+  resim();
+  $("#botIntro").textContent = `What happens if every signal is handled exactly by the rules, starting with ${inr(SET.cap)}${SET.fees ? ", after Zerodha charges" : ""}. Simulated, not real orders.`;
+  botKpis(); equityChart(); botInsights();
+  openCards($("#openCards"), Object.assign(D.trades.map((t, i) => [t, i]).filter(([t]) => t.status === "taken" && !t.exit_date), {paper: true}), i => openChart(D.trades[i], D.bars));
+  botTable(); foot(); feeLine();
+}
+function capChips() { document.querySelectorAll("[data-cap]").forEach(b => b.setAttribute("aria-pressed", +b.dataset.cap === SET.cap)); }
+function rerender() { capChips(); if (D) renderBot(); if (P) renderMe(); feeLine(); }
+capChips();
+$("#capIn").value = SET.cap.toLocaleString("en-IN");
+$("#feeIn").checked = !!SET.fees;
+let capT;
+$("#capIn").oninput = e => {
+  const n = +e.target.value.replace(/[^0-9]/g, "");
+  clearTimeout(capT);
+  capT = setTimeout(() => { if (n >= 10000) { SET.cap = n; saveSet(); e.target.value = n.toLocaleString("en-IN"); rerender(); } }, 600);
+};
+$("#capIn").onblur = e => { e.target.value = SET.cap.toLocaleString("en-IN"); };
+document.querySelectorAll("[data-cap]").forEach(b => b.onclick = () => { SET.cap = +b.dataset.cap; $("#capIn").value = SET.cap.toLocaleString("en-IN"); saveSet(); rerender(); });
+$("#feeIn").onchange = e => { SET.fees = e.target.checked; saveSet(); rerender(); };
+
 /* ---------------- BOT VIEW ---------------- */
 const STATUS = {
   taken: ["Bot bought", "info"], weak_market: ["Skipped · weak market", "warn"], no_slot: ["Skipped · slots full", "neutral"],
@@ -306,7 +415,7 @@ function kpiTiles(el, tiles) { el.innerHTML = tiles.map(([l, v, n]) => `<div cla
 function botKpis() {
   const s = D.stats, t = D.today;
   kpiTiles($("#kpis"), [
-    ["Bot portfolio", inr(s.value), `<span class="${sign(s.ret)}">${arrow(s.ret)} ${pct(s.ret)}</span> since ${nd(D.equity[0]?.[0])}`],
+    ["Bot portfolio", inr(s.value), `<span class="${sign(s.ret)}">${arrow(s.ret)} ${pct(s.ret)}</span> since ${nd(D.equity[0]?.[0])}${SET.fees ? ` · after ${inr(s.fees)} charges` : ""}`],
     ["Nifty 50, same period", pct(s.nifty_ret), `Bot is <span class="${sign(s.ret - s.nifty_ret)}">${pct(s.ret - s.nifty_ret)}</span> vs Nifty`],
     ["Win rate", s.win_rate == null ? "–" : s.win_rate.toFixed(0) + "%", `${s.wins} of ${s.closed} closed · wins ${pct(s.avg_win)}, losses ${pct(s.avg_loss)}`],
     ["Biggest fall from a high", pct(s.max_dd), `${s.open} paper trade${s.open == 1 ? "" : "s"} still open · ${inr(s.unrealized)} not yet booked`],
@@ -315,13 +424,15 @@ function botKpis() {
   $("#mood").innerHTML = `<span class="pill ${ok ? "good" : "bad"}">● ${ok ? "Healthy" : "Weak"} market · ${t.pct.toFixed(0)}%</span>`;
   $("#sub").textContent = `Updated ${D.updated} · market data ${nd(t.date)}`;
 }
+let eqC = null, eqRO = null;
 function equityChart() {
   const el = $("#eqChart");
-  const c = LightweightCharts.createChart(el, chartOpts(el, {localization: {priceFormatter: v => "₹" + (v / 100000).toFixed(1) + "L"}}));
+  if (eqC) { eqC.remove(); eqRO?.disconnect(); eqC = null; }
+  const c = eqC = LightweightCharts.createChart(el, chartOpts(el, {localization: {priceFormatter: v => v >= 1e7 ? "₹" + (v / 1e7).toFixed(2) + "Cr" : "₹" + (v / 100000).toFixed(1) + "L"}}));
   const a = c.addLineSeries({color: css("--accent"), lineWidth: 2, priceLineVisible: false, lastValueVisible: false});
   const b = c.addLineSeries({color: css("--bench"), lineWidth: 2, lineStyle: 2, priceLineVisible: false, lastValueVisible: false});
   a.setData(D.equity.map(r => ({time: r[0], value: r[1]}))); b.setData(D.equity.map(r => ({time: r[0], value: r[2]})));
-  c.timeScale().fitContent(); autosize(c, el);
+  c.timeScale().fitContent(); eqRO = autosize(c, el);
   const last = D.equity.at(-1);
   const leg = (d, v1, v2) => $("#eqLegend").innerHTML = `<span><span class="sw" style="background:var(--accent)"></span>Bot <b>${inr(v1)}</b></span><span><span class="sw" style="background:var(--bench)"></span>Nifty 50 <b>${inr(v2)}</b></span><span>${nd(d)}</span>`;
   leg(...last);
@@ -522,12 +633,34 @@ $("#lockAgain").onclick = () => { P = null; try { localStorage.removeItem("str10
 const MY = {suggested: ["Waiting to buy", "good"], bought: ["Holding", "info"], closed: ["Closed", "neutral"], skipped: ["You skipped", "warn"],
   no_reply: ["No reply", "neutral"], no_slot: ["Slots full", "neutral"]};
 let meChart = null;
+function applyMeFees() {
+  P._b ||= {stats: P.stats, curve: P.curve, rows: P.rows.map(r => ({ret: r.ret ?? r.pnl_pct, pnl: r.pnl_inr}))};
+  const B = P._b;
+  P.rows.forEach((r, i) => { r.ret = B.rows[i].ret; r.pnl_inr = B.rows[i].pnl; r.fee = null; });
+  P.stats = Object.assign({}, B.stats); P.curve = B.curve;
+  if (!SET.fees) return;
+  const ev = [];
+  P.rows.forEach(r => {
+    if (!r.qty || !r.entry_price || !["bought", "closed"].includes(r.status) || r.pnl_inr == null) return;
+    const bv = r.qty * r.entry_price, bf = fees(bv, "buy");
+    const sf = r.status === "closed" && r.exit_price ? fees(r.qty * r.exit_price, "sell") : 0;
+    r.fee = bf + sf; r.pnl_inr -= r.fee; r.ret = 100 * r.pnl_inr / (bv + bf);
+    ev.push([r.entry_date, bf]); if (sf) ev.push([r.exit_date, sf]);
+  });
+  const closed = P.rows.filter(r => r.status === "closed" && r.ret != null), open = P.rows.filter(r => r.status === "bought");
+  const wins = closed.filter(r => r.ret > 0);
+  Object.assign(P.stats, {wins: wins.length, win_rate: closed.length ? 100 * wins.length / closed.length : null,
+    realized: closed.reduce((a, r) => a + (r.pnl_inr || 0), 0), unrealized: open.reduce((a, r) => a + (r.pnl_inr || 0), 0),
+    fees: ev.reduce((a, e) => a + e[1], 0)});
+  P.curve = B.curve.map(([d, v]) => [d, v - ev.filter(e => e[0] && e[0] <= d).reduce((a, e) => a + e[1], 0)]);
+}
 function renderMe() {
-  const s = P.stats, R = P.rows; R.forEach((r, i) => { r._i = i; r.ret = r.ret ?? r.pnl_pct; });
+  applyMeFees();
+  const s = P.stats, R = P.rows; R.forEach((r, i) => { r._i = i; });
   $("#meSub").textContent = `Your real trades from Telegram · updated ${P.updated}`;
   const total = (s.realized || 0) + (s.unrealized || 0);
   kpiTiles($("#meKpis"), [
-    ["My total profit", `<span class="${sign(total)}">${inr(total)}</span>`, `${inr(s.realized)} booked · ${inr(s.unrealized)} open`],
+    ["My total profit", `<span class="${sign(total)}">${inr(total)}</span>`, `${inr(s.realized)} booked · ${inr(s.unrealized)} open${SET.fees ? ` · after ${inr(s.fees)} charges` : ""}`],
     ["Money in stocks now", inr(s.invested), `${s.open} stocks · capital ${inr(s.capital)}`],
     ["My win rate", s.win_rate == null ? "–" : s.win_rate.toFixed(0) + "%", `${s.wins} of ${s.closed} closed trades`],
     ["Suggestions followed", s.suggestions ? `${s.took} of ${s.suggestions}` : "–", `${s.skipped} skipped · ${s.own_picks} own picks`],
@@ -582,6 +715,7 @@ function renderMe() {
 function showView(me) {
   $("#tabBot").setAttribute("aria-selected", !me); $("#tabMe").setAttribute("aria-selected", me);
   $("#botView").classList.toggle("hidden", me); $("#myView").classList.toggle("hidden", !me);
+  $("#capGrp").classList.toggle("hidden", me); feeLine();
   try { localStorage.setItem("str100view", me ? "me" : "bot"); } catch {}
   if (me && !P) { let pw = null; try { pw = localStorage.getItem("str100pw"); } catch {} if (pw) { $("#remember").checked = true; unlock(pw, true); } }
 }
@@ -593,9 +727,7 @@ function foot() {
     Bot results are <b>simulated</b>. Past results don't promise future returns. Not financial advice. Data: Chartink. Charts: TradingView Lightweight Charts.`;
 }
 fetch("data.json?v=" + Date.now()).then(r => r.json()).then(d => {
-  D = d; botKpis(); equityChart(); healthChart(); botInsights();
-  openCards($("#openCards"), Object.assign(D.trades.map((t, i) => [t, i]).filter(([t]) => t.status === "taken" && !t.exit_date), {paper: true}), i => openChart(D.trades[i], D.bars));
-  botTable(); foot();
+  D = d; healthChart(); renderBot();
   let v = "bot"; try { v = localStorage.getItem("str100view") || "bot"; } catch {}
   if (v === "me") showView(true);
 }).catch(e => { $("#sub").textContent = "Could not load data: " + e; });
