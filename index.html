@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>STR100 Bot Dashboard</title>
-<meta name="description" content="Paper-trading results of the STR100 + Market Health rules, updated every trading day.">
+<meta name="description" content="STR100 + Market Health: the bot's rule-based paper portfolio and a password-locked personal view.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 :root{
   color-scheme: light;
   --bg:#f6f6f4; --surface:#fcfcfb; --surface-2:#f0efec; --border:#e4e3df;
   --text:#0b0b0b; --text-2:#52514e; --muted:#8a8984;
-  --accent:#2a78d6; --bench:#8a8984;
+  --accent:#2a78d6; --bench:#8a8984; --ema:#d98a00;
   --good:#0f8a4b; --good-bg:#e5f4ec; --bad:#c93a3a; --bad-bg:#fbeaea;
-  --warn:#a86b00; --warn-bg:#fdf3dc; --grid:#ecebe7;
+  --warn:#a86b00; --warn-bg:#fdf3dc; --grid:#ecebe7; --shadow:0 10px 40px rgba(0,0,0,.18);
   --radius:14px;
 }
 @media (prefers-color-scheme: dark){
@@ -23,161 +23,210 @@
     color-scheme: dark;
     --bg:#111110; --surface:#1a1a19; --surface-2:#232321; --border:#2e2d2b;
     --text:#f0efec; --text-2:#c3c2b7; --muted:#8d8c86;
-    --accent:#3987e5; --bench:#8d8c86;
+    --accent:#3987e5; --bench:#8d8c86; --ema:#e8a33a;
     --good:#3fbf7f; --good-bg:#16301f; --bad:#ef6b6b; --bad-bg:#3a1b1b;
-    --warn:#e0a63a; --warn-bg:#352a12; --grid:#252523;
+    --warn:#e0a63a; --warn-bg:#352a12; --grid:#252523; --shadow:0 10px 40px rgba(0,0,0,.6);
   }
 }
 :root[data-theme="dark"]{
   color-scheme: dark;
   --bg:#111110; --surface:#1a1a19; --surface-2:#232321; --border:#2e2d2b;
   --text:#f0efec; --text-2:#c3c2b7; --muted:#8d8c86;
-  --accent:#3987e5; --bench:#8d8c86;
+  --accent:#3987e5; --bench:#8d8c86; --ema:#e8a33a;
   --good:#3fbf7f; --good-bg:#16301f; --bad:#ef6b6b; --bad-bg:#3a1b1b;
-  --warn:#e0a63a; --warn-bg:#352a12; --grid:#252523;
+  --warn:#e0a63a; --warn-bg:#352a12; --grid:#252523; --shadow:0 10px 40px rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 64px}
-header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}
-h1{font-size:26px;line-height:1.2;margin:0;letter-spacing:-.02em}
-.sub{color:var(--text-2);margin-top:4px;font-size:14px}
-.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap}
+.wrap{max-width:1120px;margin:0 auto;padding:20px 16px 64px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+h1{font-size:24px;line-height:1.2;margin:0;letter-spacing:-.02em}
+.sub{color:var(--text-2);margin-top:4px;font-size:13px}
+.views{display:flex;gap:4px;background:var(--surface-2);padding:4px;border-radius:12px;margin:6px 0 18px;width:max-content;max-width:100%}
+.views button{border:0;background:transparent;color:var(--text-2);font:inherit;font-weight:600;padding:8px 16px;border-radius:9px;cursor:pointer}
+.views button[aria-selected="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap}
 .pill.good{background:var(--good-bg);color:var(--good)} .pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.warn{background:var(--warn-bg);color:var(--warn)}
-.pill.neutral{background:var(--surface-2);color:var(--text-2)}
+.pill.neutral{background:var(--surface-2);color:var(--text-2)} .pill.info{background:var(--surface-2);color:var(--accent)}
 .card{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
 .grid{display:grid;gap:14px}
 .kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width:860px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .kpi .label{color:var(--text-2);font-size:13px}
-.kpi .value{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
-.kpi .note{font-size:13px;color:var(--muted);margin-top:2px}
+.kpi .value{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .note{font-size:12.5px;color:var(--muted);margin-top:2px}
 .up{color:var(--good)} .down{color:var(--bad)}
 section{margin-top:22px}
-h2{font-size:17px;margin:0 0 4px} .h2sub{color:var(--text-2);font-size:13px;margin-bottom:12px}
-.chartbox{position:relative;height:280px}
-.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--text-2);margin-bottom:8px}
+.shead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+h2{font-size:17px;margin:0 0 2px} .h2sub{color:var(--text-2);font-size:13px;margin-bottom:12px}
+.chartbox{position:relative;height:270px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--text-2);margin-bottom:8px}
 .legend b{color:var(--text);font-variant-numeric:tabular-nums}
 .sw{display:inline-block;width:12px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
 .two{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
 @media (max-width:860px){.two{grid-template-columns:1fr}}
-.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-.tab{border:1px solid var(--border);background:var(--surface);color:var(--text-2);padding:6px 12px;border-radius:999px;font:inherit;font-size:13px;cursor:pointer}
-.tab[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.insights{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:860px){.insights{grid-template-columns:1fr}}
+.ins{display:flex;gap:12px}
+.ins .ic{font-size:20px;line-height:1.2}
+.ins b{display:block;font-size:14.5px;margin-bottom:2px}
+.ins p{margin:0;color:var(--text-2);font-size:13.5px}
+.ins p b{display:inline;font-size:inherit}
+.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);padding:6px 12px;border-radius:10px;font:inherit;font-size:13px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{border-color:var(--text-2)}
+.btn.primary{background:var(--text);color:var(--bg);border-color:var(--text)}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.seg button{border:0;border-right:1px solid var(--border);background:var(--surface);color:var(--text-2);font:inherit;font-size:13px;padding:5px 10px;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--text);color:var(--bg)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.filters input,.filters select{font:inherit;font-size:13px;padding:6px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+.filters input{width:150px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chip{border:1px solid var(--border);background:var(--surface);color:var(--text-2);padding:5px 11px;border-radius:999px;font:inherit;font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
 .tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
 table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
 th{text-align:left;font-weight:600;color:var(--text-2);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--surface-2)}
-td{padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+th.sort{cursor:pointer;user-select:none} th.sort:hover{color:var(--text)}
+td{padding:9px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
 tr.row{cursor:pointer} tr.row:hover td{background:var(--surface-2)}
-tr.sel td{background:var(--surface-2)}
 td.num,th.num{text-align:right}
 .sym{font-weight:600}
-.open-cards{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.more{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 2px;color:var(--text-2);font-size:13px;flex-wrap:wrap}
+.cards{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
 .oc{cursor:pointer;transition:border-color .15s}.oc:hover{border-color:var(--accent)}
 .oc .top{display:flex;justify-content:space-between;align-items:baseline}
-.oc .big{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.oc .big{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}
 .oc .meta{color:var(--text-2);font-size:13px;margin-top:6px}
 .bar{height:6px;border-radius:3px;background:var(--surface-2);margin-top:10px;overflow:hidden}
 .bar>i{display:block;height:100%;background:var(--accent);border-radius:3px}
-#detail{display:none}
-#detail.show{display:block}
-.dhead{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:10px}
-.facts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
-@media (max-width:640px){.facts{grid-template-columns:repeat(2,1fr)}}
-.fact{background:var(--surface-2);border-radius:10px;padding:10px 12px}
-.fact .l{font-size:12px;color:var(--text-2)} .fact .v{font-weight:600;font-variant-numeric:tabular-nums}
-.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);padding:6px 12px;border-radius:10px;font:inherit;font-size:13px;cursor:pointer;text-decoration:none}
-.foot{color:var(--muted);font-size:13px;margin-top:28px;line-height:1.6}
+.alert{border:1px solid var(--bad);background:var(--bad-bg);color:var(--text);border-radius:var(--radius);padding:12px 16px;margin-top:14px}
 .empty{color:var(--text-2);padding:16px}
-.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px}
+.foot{color:var(--muted);font-size:12.5px;margin-top:28px;line-height:1.6}
+.hidden{display:none!important}
+.lock{max-width:420px;margin:30px auto;text-align:center}
+.lock .ic{font-size:34px}
+.lock input[type=password]{width:100%;font:inherit;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);margin:12px 0 8px}
+.lock label{font-size:13px;color:var(--text-2);display:flex;gap:6px;align-items:center;justify-content:center;margin-bottom:12px}
+.err{color:var(--bad);font-size:13px;min-height:20px;margin-top:8px}
+dialog{border:0;padding:0;border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);width:min(980px,96vw);max-height:94vh}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.dlg{padding:16px 18px 18px}
+.dhead{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.facts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+@media (max-width:640px){.facts{grid-template-columns:repeat(2,1fr)}.dlg{padding:12px}}
+.fact{background:var(--surface-2);border-radius:10px;padding:9px 12px}
+.fact .l{font-size:12px;color:var(--text-2)} .fact .v{font-weight:600;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <div>
-      <h1>STR100 Bot · Paper Portfolio</h1>
+      <h1>STR100 Dashboard</h1>
       <div class="sub" id="sub">Loading…</div>
     </div>
     <div id="mood"></div>
   </header>
 
-  <div class="grid kpis" id="kpis"></div>
+  <div class="views" role="tablist">
+    <button role="tab" id="tabBot" aria-selected="true">🤖 Bot results</button>
+    <button role="tab" id="tabMe" aria-selected="false">👤 My portfolio 🔒</button>
+  </div>
 
-  <section class="grid two">
-    <div class="card">
-      <h2>Portfolio vs Nifty 50</h2>
-      <div class="h2sub">₹5,00,000 starting money, following every rule</div>
-      <div class="legend" id="eqLegend"></div>
-      <div class="chartbox" id="eqChart"></div>
-    </div>
-    <div class="card">
-      <h2>Market health</h2>
-      <div class="h2sub">% of liquid stocks above their 50 day average. Buys only at 50%+</div>
-      <div class="legend" id="hLegend"></div>
-      <div class="chartbox" id="hChart"></div>
-    </div>
-  </section>
-
-  <section id="detail" class="card" aria-live="polite">
-    <div class="dhead">
-      <div>
-        <h2 id="dTitle"></h2>
-        <div class="h2sub" id="dSub"></div>
+  <div id="botView">
+    <div class="h2sub">What happens if every signal is handled exactly by the rules, starting with ₹5,00,000. Simulated, not real orders.</div>
+    <div class="grid kpis" id="kpis"></div>
+    <section class="grid two">
+      <div class="card"><h2>Portfolio vs Nifty 50</h2><div class="legend" id="eqLegend"></div><div class="chartbox" id="eqChart"></div></div>
+      <div class="card"><h2>Market health</h2><div class="legend" id="hLegend"></div><div class="chartbox" id="hChart"></div></div>
+    </section>
+    <section>
+      <h2>What the numbers say</h2><div class="h2sub">Worked out from every trade so far. Updates daily.</div>
+      <div class="grid insights" id="botIns"></div>
+    </section>
+    <section>
+      <h2>Holding now</h2><div class="h2sub">Tap a card to see the chart</div>
+      <div class="grid cards" id="openCards"></div>
+    </section>
+    <section>
+      <div class="shead">
+        <div><h2>Every signal and what happened</h2><div class="h2sub">Filter, sort by tapping a column, tap a row for its chart</div></div>
+        <button class="btn" data-collapse="sigBody">Hide list</button>
       </div>
-      <div style="display:flex;gap:8px">
-        <a class="btn" id="dTv" target="_blank" rel="noopener">Open in TradingView ↗</a>
-        <button class="btn" id="dClose">Close</button>
-      </div>
-    </div>
-    <div class="legend">
-      <span><span class="sw" style="background:#f0a020"></span>20 day average</span>
-      <span>⬆ signal &nbsp; ● buy &nbsp; ⬇ sell</span>
-      <span><span class="sw" style="background:var(--bad)"></span>stop loss</span>
-    </div>
-    <div class="chartbox" id="dChart" style="height:340px"></div>
-    <div class="facts" id="dFacts"></div>
-  </section>
+      <div id="sigBody"></div>
+    </section>
+  </div>
 
-  <section>
-    <h2>Holding now</h2>
-    <div class="h2sub">Paper positions still open. Tap one to see its chart</div>
-    <div class="grid open-cards" id="openCards"></div>
-  </section>
-
-  <section>
-    <h2>Every signal and what happened</h2>
-    <div class="h2sub">Tap any row to see the chart with buy and sell points</div>
-    <div class="tabs" role="group" aria-label="Filter trades" id="tabs"></div>
-    <div class="tablewrap"><table>
-      <thead><tr>
-        <th>Signal</th><th>Stock</th><th class="num">Health</th><th>Result</th>
-        <th class="num">Buy</th><th class="num">Sell / Now</th><th class="num">Return</th>
-        <th class="num">Days</th><th>Why it ended</th>
-      </tr></thead>
-      <tbody id="rows"></tbody>
-    </table></div>
-  </section>
+  <div id="myView" class="hidden">
+    <div id="lockBox" class="card lock">
+      <div class="ic">🔒</div>
+      <h2>My portfolio</h2>
+      <div class="h2sub">Your real trades from the Telegram bot. Only visible with your dashboard password.</div>
+      <form id="lockForm">
+        <input type="password" id="pw" placeholder="Dashboard password" autocomplete="current-password" required>
+        <label><input type="checkbox" id="remember"> Remember on this device</label>
+        <button class="btn primary" style="width:100%;padding:10px">Unlock</button>
+      </form>
+      <div class="err" id="pwErr"></div>
+    </div>
+    <div id="meBody" class="hidden">
+      <div class="shead"><div class="h2sub" id="meSub"></div><button class="btn" id="lockAgain">🔒 Lock</button></div>
+      <div id="meAlert"></div>
+      <div class="grid kpis" id="meKpis" style="margin-top:10px"></div>
+      <section class="card"><h2>My profit &amp; loss over time</h2><div class="legend" id="meLegend"></div><div class="chartbox" id="meChart"></div></section>
+      <section><h2>What the numbers say about me</h2><div class="h2sub">Compares what you did with what the rules suggested</div><div class="grid insights" id="meIns"></div></section>
+      <section><h2>My stocks now</h2><div class="h2sub">Tap a card to see the chart</div><div class="grid cards" id="meCards"></div></section>
+      <section>
+        <div class="shead">
+          <div><h2>My trade journal</h2><div class="h2sub">Every suggestion from Telegram and what you did with it</div></div>
+          <button class="btn" data-collapse="meTable">Hide list</button>
+        </div>
+        <div id="meTable"></div>
+      </section>
+    </div>
+  </div>
 
   <div class="foot" id="foot"></div>
 </div>
 
+<dialog id="dlg">
+  <div class="dlg">
+    <div class="dhead">
+      <div><h2 id="dTitle"></h2><div class="h2sub" id="dSub" style="margin:0"></div></div>
+      <div style="display:flex;gap:8px"><a class="btn" id="dTv" target="_blank" rel="noopener">TradingView ↗</a><button class="btn" id="dClose" aria-label="Close">✕</button></div>
+    </div>
+    <div class="tools">
+      <div class="seg" id="ivSeg" aria-label="Candle size"><button data-iv="D" aria-pressed="true">Daily</button><button data-iv="W" aria-pressed="false">Weekly</button></div>
+      <div class="seg" id="rgSeg" aria-label="Time range"><button data-rg="trade" aria-pressed="true">Trade</button><button data-rg="21">1M</button><button data-rg="63">3M</button><button data-rg="126">6M</button><button data-rg="all">All</button></div>
+      <div class="seg"><button id="zIn" aria-label="Zoom in">＋</button><button id="zOut" aria-label="Zoom out">－</button></div>
+      <span style="font-size:12.5px;color:var(--muted)">Drag to move · pinch or scroll to zoom</span>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--ema)"></span><span id="emaLbl">20 day average</span></span>
+      <span>⬆ signal · ● buy · ⬇ sell</span>
+      <span><span class="sw" style="background:var(--bad)"></span>stop loss</span>
+    </div>
+    <div class="chartbox" id="dChart" style="height:min(380px,48vh)"></div>
+    <div class="facts" id="dFacts"></div>
+  </div>
+</dialog>
+
 <script>
 const $ = s => document.querySelector(s);
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const inr = x => x == null ? "–" : "₹" + Math.round(x).toLocaleString("en-IN");
+const inr = x => x == null ? "–" : (x < 0 ? "-₹" : "₹") + Math.abs(Math.round(x)).toLocaleString("en-IN");
 const px = x => x == null ? "–" : "₹" + Number(x).toLocaleString("en-IN", {maximumFractionDigits: x < 100 ? 2 : 1});
-const pct = (x, d = 1) => x == null ? "–" : (x > 0 ? "+" : "") + x.toFixed(d) + "%";
+const pct = (x, d = 1) => x == null || isNaN(x) ? "–" : (x > 0 ? "+" : "") + Number(x).toFixed(d) + "%";
 const sign = x => x > 0 ? "up" : x < 0 ? "down" : "";
 const arrow = x => x > 0 ? "▲" : x < 0 ? "▼" : "";
 const nd = d => { if (!d) return "–"; const t = new Date(d + "T00:00:00"); return t.toLocaleDateString("en-IN", {day: "numeric", month: "short"}); };
-const REASON = {stop: "Stop loss hit", stop_gap: "Opened below stop", trail: "Closed below 20 day avg", time: "40 days done", open: "Still holding"};
-const STATUS = {
-  taken: ["Bought", "neutral"], weak_market: ["Skipped: weak market", "warn"],
-  no_slot: ["Skipped: 10 slots full", "neutral"], holding: ["Already holding", "neutral"],
-  pending: ["Buy at next open", "good"], no_data: ["No price data", "neutral"], no_cash: ["No cash left", "neutral"]
-};
-let D, sel = null, dChart = null;
+const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+const daysAgo = d => (Date.now() - new Date(d + "T00:00:00")) / 864e5;
+const REASON = {stop: "Stop loss hit", stop_gap: "Opened below stop", trail: "Below 20 day avg", time: "40 days done", open: "Still holding", "you sold": "You sold"};
+let D = null, P = null;
 
 function chartOpts(el, extra = {}) {
   return Object.assign({
@@ -188,156 +237,367 @@ function chartOpts(el, extra = {}) {
     crosshair: {mode: 1}, handleScroll: false, handleScale: false,
   }, extra);
 }
-function autosize(chart, el) { new ResizeObserver(() => chart.applyOptions({width: el.clientWidth, height: el.clientHeight})).observe(el); }
+function autosize(chart, el) { const ro = new ResizeObserver(() => chart.applyOptions({width: el.clientWidth, height: el.clientHeight})); ro.observe(el); return ro; }
 
-function kpis() {
-  const s = D.stats, t = D.today;
-  const tiles = [
-    ["Paper portfolio", inr(s.value), `<span class="${sign(s.ret)}">${arrow(s.ret)} ${pct(s.ret)}</span> since ${nd(D.equity[0]?.[0])}`],
-    ["Nifty 50, same period", pct(s.nifty_ret), `<span class="${sign(s.ret - s.nifty_ret)}">${pct(s.ret - s.nifty_ret)} vs Nifty</span>`],
-    ["Win rate", s.win_rate == null ? "–" : s.win_rate.toFixed(0) + "%", `${s.wins} wins of ${s.closed} closed · avg win ${pct(s.avg_win)}, avg loss ${pct(s.avg_loss)}`],
-    ["Biggest fall from top", pct(s.max_dd), `${s.open} open now · ${inr(s.unrealized)} unrealised`],
-  ];
-  $("#kpis").innerHTML = tiles.map(([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="note">${n}</div></div>`).join("");
-  const healthy = t.pct >= D.rules.health_min;
-  $("#mood").innerHTML = `<span class="pill ${healthy ? "good" : "bad"}">${healthy ? "● Healthy market" : "● Weak market"} · ${t.pct.toFixed(0)}%</span>`;
-  $("#sub").textContent = `Simulated trades from the bot's rules · updated ${D.updated}`;
+/* reusable filter / sort / show-more table */
+function DataTable(root, cfg) {
+  const st = {chip: cfg.chips[0].k, q: "", period: "all", ret: "any", health: "any", sort: cfg.defaultSort, dir: -1, limit: 15};
+  root.innerHTML = `
+    <div class="chips">${cfg.chips.map(c => `<button class="chip" data-k="${c.k}">${c.l} <span style="opacity:.6" data-n="${c.k}"></span></button>`).join("")}</div>
+    <div class="filters">
+      <input type="search" placeholder="Search stock" aria-label="Search stock">
+      <select data-f="period" aria-label="Period"><option value="all">All time</option><option value="30">Last 30 days</option><option value="90">Last 3 months</option><option value="180">Last 6 months</option></select>
+      <select data-f="ret" aria-label="Result"><option value="any">Any result</option><option value="win">Winners</option><option value="loss">Losers</option><option value="big">Big wins (20%+)</option><option value="stop">Big losses (−8% or worse)</option></select>
+      ${cfg.health ? `<select data-f="health" aria-label="Market health"><option value="any">Any health</option><option value="60">Health 60%+</option><option value="50">Health 50–60%</option><option value="low">Health below 50%</option></select>` : ""}
+      <button class="btn" data-reset>Reset</button>
+    </div>
+    <div class="tablewrap"><table><thead><tr>${cfg.cols.map(c => `<th class="${c.num ? "num " : ""}${c.sort ? "sort" : ""}" data-s="${c.sort || ""}">${c.h}<span data-arrow="${c.sort || ""}"></span></th>`).join("")}</tr></thead><tbody></tbody></table></div>
+    <div class="more"><span data-count></span><span style="display:flex;gap:8px"><button class="btn" data-less>Show less</button><button class="btn" data-more>Show 15 more</button></span></div>`;
+  const tb = root.querySelector("tbody");
+  root.querySelectorAll(".chip").forEach(b => b.onclick = () => { st.chip = b.dataset.k; st.limit = 15; render(); });
+  root.querySelector("input").oninput = e => { st.q = e.target.value.trim().toUpperCase(); st.limit = 15; render(); };
+  root.querySelectorAll("select").forEach(s => s.onchange = () => { st[s.dataset.f] = s.value; st.limit = 15; render(); });
+  root.querySelectorAll("th.sort").forEach(th => th.onclick = () => { const k = th.dataset.s; st.dir = st.sort === k ? -st.dir : -1; st.sort = k; render(); });
+  root.querySelector("[data-more]").onclick = () => { st.limit += 15; render(); };
+  root.querySelector("[data-less]").onclick = () => { st.limit = 15; render(); };
+  root.querySelector("[data-reset]").onclick = () => { Object.assign(st, {q: "", period: "all", ret: "any", health: "any", limit: 15}); root.querySelector("input").value = ""; root.querySelectorAll("select").forEach(s => s.value = s.options[0].value); render(); };
+  function pass(r) {
+    const ret = cfg.ret(r), d = cfg.date(r);
+    if (st.q && !r.symbol.includes(st.q)) return false;
+    if (st.period !== "all" && (!d || daysAgo(d) > +st.period)) return false;
+    if (st.ret === "win" && !(ret > 0)) return false;
+    if (st.ret === "loss" && !(ret <= 0)) return false;
+    if (st.ret === "big" && !(ret >= 20)) return false;
+    if (st.ret === "stop" && !(ret <= -8)) return false;
+    if (st.health === "60" && !(r.health >= 60)) return false;
+    if (st.health === "50" && !(r.health >= 50 && r.health < 60)) return false;
+    if (st.health === "low" && !(r.health < 50)) return false;
+    return true;
+  }
+  function render() {
+    const base = cfg.rows().filter(pass);
+    cfg.chips.forEach(c => root.querySelector(`[data-n="${c.k}"]`).textContent = base.filter(c.f).length);
+    root.querySelectorAll(".chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === st.chip));
+    const list = base.filter(cfg.chips.find(c => c.k === st.chip).f);
+    const key = cfg.sorters[st.sort];
+    list.sort((a, b) => { const x = key(a), y = key(b); if (x == null) return 1; if (y == null) return -1; return (x < y ? -1 : x > y ? 1 : 0) * st.dir; });
+    root.querySelectorAll("[data-arrow]").forEach(s => s.textContent = s.dataset.arrow === st.sort ? (st.dir < 0 ? " ↓" : " ↑") : "");
+    const shown = list.slice(0, st.limit);
+    tb.innerHTML = shown.length ? shown.map(r => `<tr class="row" tabindex="0" data-i="${cfg.idx(r)}">${cfg.cells(r)}</tr>`).join("")
+      : `<tr><td colspan="${cfg.cols.length}" class="empty">Nothing matches these filters.</td></tr>`;
+    tb.querySelectorAll("tr.row").forEach(tr => tr.onclick = tr.onkeydown = e => { if (e.type === "click" || e.key === "Enter") cfg.open(+tr.dataset.i); });
+    root.querySelector("[data-count]").textContent = `Showing ${shown.length} of ${list.length}`;
+    root.querySelector("[data-more]").classList.toggle("hidden", shown.length >= list.length);
+    root.querySelector("[data-less]").classList.toggle("hidden", st.limit <= 15);
+  }
+  render();
 }
+document.querySelectorAll("[data-collapse]").forEach(b => b.onclick = () => {
+  const el = document.getElementById(b.dataset.collapse), h = !el.classList.contains("hidden");
+  el.classList.toggle("hidden", h); b.textContent = h ? "Show list" : "Hide list";
+});
 
+/* ---------------- BOT VIEW ---------------- */
+const STATUS = {
+  taken: ["Bought", "info"], weak_market: ["Skipped · weak market", "warn"], no_slot: ["Skipped · slots full", "neutral"],
+  holding: ["Already holding", "neutral"], pending: ["Buy at next open", "good"], no_data: ["No data", "neutral"], no_cash: ["No cash", "neutral"]
+};
+function kpiTiles(el, tiles) { el.innerHTML = tiles.map(([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="note">${n}</div></div>`).join(""); }
+function botKpis() {
+  const s = D.stats, t = D.today;
+  kpiTiles($("#kpis"), [
+    ["Bot portfolio", inr(s.value), `<span class="${sign(s.ret)}">${arrow(s.ret)} ${pct(s.ret)}</span> since ${nd(D.equity[0]?.[0])}`],
+    ["Nifty 50, same period", pct(s.nifty_ret), `Bot is <span class="${sign(s.ret - s.nifty_ret)}">${pct(s.ret - s.nifty_ret)}</span> vs Nifty`],
+    ["Win rate", s.win_rate == null ? "–" : s.win_rate.toFixed(0) + "%", `${s.wins} of ${s.closed} closed · wins ${pct(s.avg_win)}, losses ${pct(s.avg_loss)}`],
+    ["Biggest fall from a high", pct(s.max_dd), `${s.open} open · ${inr(s.unrealized)} not yet booked`],
+  ]);
+  const ok = t.pct >= D.rules.health_min;
+  $("#mood").innerHTML = `<span class="pill ${ok ? "good" : "bad"}">● ${ok ? "Healthy" : "Weak"} market · ${t.pct.toFixed(0)}%</span>`;
+  $("#sub").textContent = `Updated ${D.updated} · market data ${nd(t.date)}`;
+}
 function equityChart() {
   const el = $("#eqChart");
-  const c = LightweightCharts.createChart(el, chartOpts(el, {localization: {priceFormatter: v => "₹" + (v / 100000).toFixed(2) + "L"}}));
+  const c = LightweightCharts.createChart(el, chartOpts(el, {localization: {priceFormatter: v => "₹" + (v / 100000).toFixed(1) + "L"}}));
   const a = c.addLineSeries({color: css("--accent"), lineWidth: 2, priceLineVisible: false, lastValueVisible: false});
   const b = c.addLineSeries({color: css("--bench"), lineWidth: 2, lineStyle: 2, priceLineVisible: false, lastValueVisible: false});
-  a.setData(D.equity.map(r => ({time: r[0], value: r[1]})));
-  b.setData(D.equity.map(r => ({time: r[0], value: r[2]})));
+  a.setData(D.equity.map(r => ({time: r[0], value: r[1]}))); b.setData(D.equity.map(r => ({time: r[0], value: r[2]})));
   c.timeScale().fitContent(); autosize(c, el);
-  const last = D.equity[D.equity.length - 1];
-  const leg = (d, v1, v2) => $("#eqLegend").innerHTML =
-    `<span><span class="sw" style="background:var(--accent)"></span>Bot <b>${inr(v1)}</b></span>` +
-    `<span><span class="sw" style="background:var(--bench)"></span>Nifty 50 <b>${inr(v2)}</b></span><span>${nd(d)}</span>`;
-  leg(last[0], last[1], last[2]);
-  c.subscribeCrosshairMove(p => {
-    if (!p.time) return leg(last[0], last[1], last[2]);
-    leg(p.time, p.seriesData.get(a)?.value, p.seriesData.get(b)?.value);
-  });
+  const last = D.equity.at(-1);
+  const leg = (d, v1, v2) => $("#eqLegend").innerHTML = `<span><span class="sw" style="background:var(--accent)"></span>Bot <b>${inr(v1)}</b></span><span><span class="sw" style="background:var(--bench)"></span>Nifty 50 <b>${inr(v2)}</b></span><span>${nd(d)}</span>`;
+  leg(...last);
+  c.subscribeCrosshairMove(p => p.time ? leg(p.time, p.seriesData.get(a)?.value, p.seriesData.get(b)?.value) : leg(...last));
 }
-
 function healthChart() {
   const el = $("#hChart");
   const c = LightweightCharts.createChart(el, chartOpts(el, {localization: {priceFormatter: v => v.toFixed(0) + "%"}}));
-  const s = c.addBaselineSeries({
-    baseValue: {type: "price", price: D.rules.health_min}, lineWidth: 2,
+  const s = c.addBaselineSeries({baseValue: {type: "price", price: D.rules.health_min}, lineWidth: 2,
     topLineColor: css("--good"), topFillColor1: css("--good") + "44", topFillColor2: css("--good") + "08",
-    bottomLineColor: css("--bad"), bottomFillColor1: css("--bad") + "08", bottomFillColor2: css("--bad") + "44",
-    priceLineVisible: false, lastValueVisible: false,
-  });
+    bottomLineColor: css("--bad"), bottomFillColor1: css("--bad") + "08", bottomFillColor2: css("--bad") + "44", priceLineVisible: false, lastValueVisible: false});
   s.setData(D.health.map(r => ({time: r[0], value: r[1]})));
   s.createPriceLine({price: D.rules.health_min, color: css("--muted"), lineStyle: 2, lineWidth: 1, axisLabelVisible: true, title: "buy line"});
   c.timeScale().fitContent(); autosize(c, el);
-  const last = D.health[D.health.length - 1];
-  const leg = (d, v) => $("#hLegend").innerHTML = `<span>${nd(d)}</span><span>Health <b>${v == null ? "–" : v.toFixed(1) + "%"}</b> ${v >= D.rules.health_min ? "· okay to buy" : "· no new buys"}</span>`;
-  leg(last[0], last[1]);
-  c.subscribeCrosshairMove(p => p.time ? leg(p.time, p.seriesData.get(s)?.value) : leg(last[0], last[1]));
+  const last = D.health.at(-1);
+  const leg = (d, v) => $("#hLegend").innerHTML = `<span>${nd(d)}</span><span>Health <b>${v == null ? "–" : v.toFixed(1) + "%"}</b> · ${v >= D.rules.health_min ? "okay to buy" : "no new buys"}</span>`;
+  leg(...last);
+  c.subscribeCrosshairMove(p => p.time ? leg(p.time, p.seriesData.get(s)?.value) : leg(...last));
 }
-
-function openCards() {
-  const open = D.trades.filter(t => t.status === "taken" && !t.exit_date);
-  if (!open.length) { $("#openCards").innerHTML = `<div class="card empty">No open positions right now.</div>`; return; }
-  $("#openCards").innerHTML = open.map(t => {
-    const i = D.trades.indexOf(t), prog = Math.min(100, 100 * t.days / D.rules.max_hold);
+function insightCards(el, items) {
+  const list = items.filter(Boolean);
+  el.innerHTML = list.length ? list.map(([ic, h, p]) => `<div class="card ins"><div class="ic">${ic}</div><div><b>${h}</b><p>${p}</p></div></div>`).join("")
+    : `<div class="card empty">Not enough trades yet. Insights appear after a few trades.</div>`;
+}
+function botInsights() {
+  const T = D.trades, closed = T.filter(t => t.status === "taken" && t.exit_date);
+  const wins = closed.filter(t => t.ret > 0), losses = closed.filter(t => t.ret <= 0);
+  const weak = T.filter(t => t.status === "weak_market" && t.ret != null), slot = T.filter(t => t.status === "no_slot" && t.ret != null);
+  const hi = closed.filter(t => t.health >= 60), mid = closed.filter(t => t.health < 60);
+  const wr = a => a.length ? Math.round(100 * a.filter(t => t.ret > 0).length / a.length) : null;
+  const stops = closed.filter(t => t.reason === "stop" || t.reason === "stop_gap");
+  const payoff = wins.length && losses.length ? avg(wins.map(t => t.ret)) / Math.abs(avg(losses.map(t => t.ret))) : null;
+  const months = {}; D.equity.forEach(([d, v]) => { (months[d.slice(0, 7)] ||= []).push(v); });
+  const mret = Object.entries(months).map(([m, v], i, arr) => [m, 100 * (v.at(-1) / (i ? arr[i - 1][1].at(-1) : D.stats.capital) - 1)]);
+  const best = mret.reduce((a, b) => b[1] > a[1] ? b : a, mret[0]), worst = mret.reduce((a, b) => b[1] < a[1] ? b : a, mret[0]);
+  const mName = m => new Date(m + "-01T00:00:00").toLocaleDateString("en-IN", {month: "long"});
+  const runners = {}; closed.forEach(t => (runners[t.symbol] ||= []).push(t.ret));
+  const topR = Object.entries(runners).map(([s, r]) => [s, r.length, r.reduce((a, b) => a + b, 0)]).sort((a, b) => b[2] - a[2])[0];
+  const wAvg = avg(weak.map(t => t.ret)), tAvg = avg(closed.map(t => t.ret)), sAvg = avg(slot.map(t => t.ret));
+  insightCards($("#botIns"), [
+    weak.length && closed.length && [wAvg < tAvg ? "🛡️" : "🤔", wAvg < tAvg ? "The market-health filter is earning its keep" : "The health filter cost some upside lately",
+      `${weak.length} signals came on weak days. Bought anyway, they'd have averaged <b class="${sign(wAvg)}">${pct(wAvg)}</b>, vs <b class="${sign(tAvg)}">${pct(tAvg)}</b> for trades the bot took.`],
+    payoff && ["🏃", "Small losses, big wins",
+      `An average win (${pct(avg(wins.map(t => t.ret)))}) is ${payoff.toFixed(1)}× an average loss (${pct(avg(losses.map(t => t.ret)))}). Winners were held ${Math.round(avg(wins.map(t => t.days)))} days, losers ${Math.round(avg(losses.map(t => t.days)))}. Let winners run.`],
+    hi.length && mid.length && ["🌡️", wr(hi) >= wr(mid) ? "Stronger market, better results" : "60%+ health isn't always better",
+      `At 60%+ health: ${wr(hi)}% wins, avg ${pct(avg(hi.map(t => t.ret)))}. At 50–60%: ${wr(mid)}% wins, avg ${pct(avg(mid.map(t => t.ret)))}.`],
+    stops.length && ["🛑", `About 1 in ${Math.max(1, Math.round(closed.length / stops.length))} trades hits the stop`,
+      `${stops.length} of ${closed.length} closed trades ended at the 10% stop. Always place a GTT stop-loss right after buying.`],
+    slot.length && ["📦", `${slot.length} signals missed because all slots were full`,
+      `If bought, they'd have averaged <b class="${sign(sAvg)}">${pct(sAvg)}</b>. ${sAvg > tAvg ? "More slots could have helped." : "Picking the calmest candles first worked well."}`],
+    best && mret.length > 1 && ["📅", `Best month: ${mName(best[0])} (${pct(best[1])})`, `Worst month: ${mName(worst[0])} (${pct(worst[1])}). Returns come in bursts, so stay consistent through slow months.`],
+    topR && topR[1] > 1 && ["🔁", `${topR[0]} kept coming back`, `Bought ${topR[1]} times, adding up to ${pct(topR[2])}. Leaders often signal again after a pause.`],
+  ].filter(Boolean).slice(0, 6));
+}
+function openCards(el, list, onOpen) {
+  if (!list.length) { el.innerHTML = `<div class="card empty">Nothing open right now.</div>`; return; }
+  el.innerHTML = list.map(([t, i, extra]) => {
+    const prog = Math.min(100, 100 * (t.days || 0) / 40), ret = t.ret, pnl = t.pnl ?? t.pnl_inr;
     return `<div class="card oc" data-i="${i}" tabindex="0">
-      <div class="top"><span class="sym">${t.symbol}</span><span class="big ${sign(t.ret)}">${arrow(t.ret)} ${pct(t.ret)}</span></div>
-      <div class="meta">Bought ${nd(t.entry_date)} at ${px(t.entry)} · now ${px(t.now)}<br>${t.qty} shares · ${inr(t.pnl)} · stop ${px(t.stop)}</div>
-      <div class="bar" title="day ${t.days} of ${D.rules.max_hold}"><i style="width:${prog}%"></i></div>
-      <div class="meta">Day ${t.days} of ${D.rules.max_hold}</div></div>`;
+      <div class="top"><span class="sym">${t.symbol}</span><span class="big ${sign(ret)}">${arrow(ret)} ${pct(ret)}</span></div>
+      <div class="meta">Bought ${nd(t.entry_date)} at ${px(t.entry ?? t.entry_price)} · now ${px(t.now)}<br>${t.qty ?? "–"} shares · <span class="${sign(pnl)}">${inr(pnl)}</span> · stop ${px(t.stop)}${extra || ""}</div>
+      <div class="bar"><i style="width:${prog}%"></i></div><div class="meta">Day ${t.days ?? 0} of 40</div></div>`;
   }).join("");
-  document.querySelectorAll(".oc").forEach(el => el.onclick = el.onkeydown = e => { if (e.type === "click" || e.key === "Enter") showDetail(+el.dataset.i); });
+  el.querySelectorAll(".oc").forEach(c => c.onclick = c.onkeydown = e => { if (e.type === "click" || e.key === "Enter") onOpen(+c.dataset.i); });
+}
+function botTable() {
+  D.trades.forEach((t, i) => t._i = i);
+  DataTable($("#sigBody"), {
+    health: true, defaultSort: "date",
+    chips: [
+      {k: "taken", l: "Bought", f: t => t.status === "taken"},
+      {k: "open", l: "Holding", f: t => t.status === "taken" && !t.exit_date},
+      {k: "skipped", l: "Skipped", f: t => ["weak_market", "no_slot"].includes(t.status)},
+      {k: "all", l: "All signals", f: () => true}],
+    cols: [{h: "Signal", sort: "date"}, {h: "Stock", sort: "sym"}, {h: "Health", num: 1, sort: "health"}, {h: "Result"}, {h: "Buy", num: 1},
+      {h: "Sell / now", num: 1}, {h: "Return", num: 1, sort: "ret"}, {h: "Days", num: 1, sort: "days"}, {h: "Why it ended"}],
+    sorters: {date: t => t.signal, sym: t => t.symbol, health: t => t.health, ret: t => t.ret, days: t => t.days},
+    rows: () => D.trades, idx: t => t._i, date: t => t.signal, ret: t => t.ret,
+    open: i => openChart(D.trades[i], D.bars),
+    cells: t => {
+      const [st, tone] = STATUS[t.status] || [t.status, "neutral"], hypo = t.status !== "taken" && t.ret != null;
+      return `<td>${nd(t.signal)}</td><td class="sym">${t.symbol}</td>
+        <td class="num ${t.health >= D.rules.health_min ? "up" : "down"}">${t.health == null ? "–" : t.health.toFixed(0) + "%"}</td>
+        <td><span class="pill ${tone}">${st}</span></td><td class="num">${px(t.entry)}</td><td class="num">${px(t.exit ?? t.now)}</td>
+        <td class="num"><span class="${sign(t.ret)}">${t.ret == null ? "–" : arrow(t.ret) + " " + pct(t.ret)}</span>${hypo ? ` <span style="color:var(--muted);font-size:12px">if bought</span>` : ""}</td>
+        <td class="num">${t.days ?? "–"}</td><td>${REASON[t.reason] || "–"}</td>`;
+    }});
 }
 
-const FILTERS = [
-  ["taken", "Bought", t => t.status === "taken"],
-  ["open", "Holding now", t => t.status === "taken" && !t.exit_date],
-  ["wins", "Winners", t => t.status === "taken" && t.exit_date && t.ret > 0],
-  ["losses", "Losers", t => t.status === "taken" && t.exit_date && t.ret <= 0],
-  ["skipped", "Skipped", t => ["weak_market", "no_slot"].includes(t.status)],
-  ["all", "All signals", t => true],
-];
-let filter = "taken";
-function tabs() {
-  $("#tabs").innerHTML = FILTERS.map(([k, l, f]) => `<button class="tab" aria-pressed="${k === filter}" data-k="${k}">${l} <span style="opacity:.6">${D.trades.filter(f).length}</span></button>`).join("");
-  document.querySelectorAll(".tab").forEach(b => b.onclick = () => { filter = b.dataset.k; tabs(); rows(); });
+/* ---------------- CHART DIALOG ---------------- */
+let dChart = null, dRO = null, cur = null, iv = "D", rg = "trade";
+function weekly(b) {
+  const out = {d: [], o: [], h: [], l: [], c: [], e: []}, map = {};
+  b.d.forEach((d, k) => {
+    const t = new Date(d + "T00:00:00Z"), mon = new Date(t); mon.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7));
+    const key = mon.toISOString().slice(0, 10);
+    if (out.d.at(-1) !== key) { out.d.push(key); out.o.push(b.o[k]); out.h.push(b.h[k]); out.l.push(b.l[k]); out.c.push(b.c[k]); }
+    else { const j = out.d.length - 1; out.h[j] = Math.max(out.h[j], b.h[k]); out.l[j] = Math.min(out.l[j], b.l[k]); out.c[j] = b.c[k]; }
+    map[d] = key;
+  });
+  const kk = 2 / 21; out.c.forEach((c, j) => out.e.push(j ? c * kk + out.e[j - 1] * (1 - kk) : c));
+  return [out, map];
 }
-function rows() {
-  const f = FILTERS.find(x => x[0] === filter)[2];
-  const list = D.trades.map((t, i) => [t, i]).filter(([t]) => f(t)).reverse();
-  if (!list.length) { $("#rows").innerHTML = `<tr><td colspan="9" class="empty">Nothing here yet.</td></tr>`; return; }
-  $("#rows").innerHTML = list.map(([t, i]) => {
-    const [st, tone] = STATUS[t.status] || [t.status, "neutral"];
-    const hypo = t.status !== "taken" && t.ret != null;
-    const ret = t.ret == null ? "–" : `<span class="${sign(t.ret)}">${arrow(t.ret)} ${pct(t.ret)}</span>${hypo ? ` <span style="color:var(--muted)">if bought</span>` : ""}`;
-    return `<tr class="row ${sel === i ? "sel" : ""}" data-i="${i}" tabindex="0">
-      <td>${nd(t.signal)}</td><td class="sym">${t.symbol}</td>
-      <td class="num"><span class="${t.health >= D.rules.health_min ? "up" : "down"}">${t.health == null ? "–" : t.health.toFixed(0) + "%"}</span></td>
-      <td><span class="pill ${tone}">${st}</span></td>
-      <td class="num">${px(t.entry)}</td><td class="num">${px(t.exit ?? t.now)}</td>
-      <td class="num">${ret}</td><td class="num">${t.days ?? "–"}</td>
-      <td>${REASON[t.reason] || "–"}</td></tr>`;
-  }).join("");
-  document.querySelectorAll("tr.row").forEach(el => el.onclick = el.onkeydown = e => { if (e.type === "click" || e.key === "Enter") showDetail(+el.dataset.i); });
+function drawChart() {
+  const {t, bars} = cur, raw = bars[t.symbol], el = $("#dChart");
+  if (dChart) { dChart.remove(); dRO?.disconnect(); dChart = null; }
+  el.innerHTML = "";
+  if (!raw) { el.innerHTML = `<div class="empty">No chart data for this stock.</div>`; return; }
+  const [b, map] = iv === "W" ? weekly(raw) : [raw, null];
+  const T = d => !d ? null : map ? map[d] : d;
+  $("#emaLbl").textContent = iv === "W" ? "20 week average" : "20 day average";
+  dChart = LightweightCharts.createChart(el, chartOpts(el, {handleScroll: true, handleScale: true, timeScale: {borderVisible: false, rightOffset: 4}}));
+  const cs = dChart.addCandlestickSeries({upColor: css("--good"), downColor: css("--bad"), borderVisible: false, wickUpColor: css("--good"), wickDownColor: css("--bad"), priceLineVisible: false});
+  cs.setData(b.d.map((d, k) => ({time: d, open: b.o[k], high: b.h[k], low: b.l[k], close: b.c[k]})));
+  dChart.addLineSeries({color: css("--ema"), lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false})
+    .setData(b.d.map((d, k) => ({time: d, value: b.e[k]})));
+  const entry = t.entry ?? t.entry_price, ret = t.ret ?? t.pnl_pct;
+  const k0 = raw.d.indexOf(t.entry_date), scale = k0 >= 0 && entry ? raw.o[k0] / entry : 1;
+  const mk = [];
+  if (t.signal || t.signal_date) mk.push({time: T(t.signal || t.signal_date), position: "belowBar", color: css("--accent"), shape: "arrowUp", text: ""});
+  if (t.entry_date) mk.push({time: T(t.entry_date), position: "belowBar", color: css("--accent"), shape: "circle", text: "buy " + px(entry)});
+  if (t.exit_date) mk.push({time: T(t.exit_date), position: "aboveBar", color: ret > 0 ? css("--good") : css("--bad"), shape: "arrowDown", text: "sell " + pct(ret)});
+  cs.setMarkers(mk.filter(m => m.time && b.d.includes(m.time)).sort((x, y) => x.time < y.time ? -1 : 1));
+  if (entry) {
+    cs.createPriceLine({price: entry * scale, color: css("--accent"), lineStyle: 2, lineWidth: 1, title: "buy"});
+    cs.createPriceLine({price: (t.stop ?? entry * 0.9) * scale, color: css("--bad"), lineStyle: 2, lineWidth: 1, title: "stop"});
+  }
+  setRange(b, T);
+  dRO = autosize(dChart, el);
 }
-
-function showDetail(i) {
-  sel = i; const t = D.trades[i], b = D.bars[t.symbol];
-  $("#detail").classList.add("show");
+function setRange(b, T) {
+  const ts = dChart.timeScale(), n = b.d.length, {t} = cur;
+  if (rg === "all") return ts.fitContent();
+  if (rg === "trade") {
+    const s = b.d.indexOf(T(t.signal || t.signal_date || t.entry_date)), e = t.exit_date ? b.d.indexOf(T(t.exit_date)) : n - 1;
+    const pad = iv === "W" ? 4 : 15;
+    return ts.setVisibleLogicalRange({from: Math.max(0, (s < 0 ? n - 60 : s) - pad), to: (e < 0 ? n - 1 : e) + pad / 2});
+  }
+  const bars = iv === "W" ? Math.ceil(+rg / 5) : +rg;
+  ts.setVisibleLogicalRange({from: n - bars, to: n + 2});
+}
+function zoom(f) {
+  const ts = dChart?.timeScale(), r = ts?.getVisibleLogicalRange(); if (!r) return;
+  const mid = (r.from + r.to) / 2, half = Math.max(3, (r.to - r.from) / 2 * f);
+  ts.setVisibleLogicalRange({from: mid - half, to: mid + half});
+}
+function openChart(t, bars) {
+  cur = {t, bars}; rg = "trade";
   $("#dTitle").textContent = t.symbol;
-  const [st] = STATUS[t.status] || [t.status];
-  $("#dSub").textContent = `Signal ${nd(t.signal)} at ${t.health?.toFixed(0)}% market health · ${st}`;
+  const sig = t.signal || t.signal_date;
+  $("#dSub").textContent = (sig ? `Signal ${nd(sig)}` : "Your own pick") + (t.health != null ? ` at ${t.health.toFixed(0)}% market health` : "");
   $("#dTv").href = `https://www.tradingview.com/chart/?symbol=NSE:${t.symbol.replace("&", "_")}`;
+  const entry = t.entry ?? t.entry_price, exit = t.exit ?? t.exit_price, ret = t.ret ?? t.pnl_pct, pnl = t.pnl ?? t.pnl_inr;
   const facts = [
-    ["Bought", t.entry_date ? `${px(t.entry)} · ${nd(t.entry_date)}` : "–"],
-    [t.exit_date ? "Sold" : "Now", t.exit_date ? `${px(t.exit)} · ${nd(t.exit_date)}` : px(t.now)],
-    ["Return", `<span class="${sign(t.ret)}">${arrow(t.ret)} ${pct(t.ret)}</span>`],
-    [t.status === "taken" ? "Profit" : "Days", t.status === "taken" ? `<span class="${sign(t.pnl)}">${inr(t.pnl)}</span> (${t.qty} sh)` : (t.days ?? "–")],
+    ["Bought", t.entry_date ? `${px(entry)} · ${nd(t.entry_date)}` : "–"],
+    [t.exit_date ? "Sold" : "Now", t.exit_date ? `${px(exit)} · ${nd(t.exit_date)}` : px(t.now)],
+    ["Return", ret != null ? `<span class="${sign(ret)}">${arrow(ret)} ${pct(ret)}</span>` : (t.if_ret != null ? `${pct(t.if_ret)} if bought` : "–")],
+    [pnl != null ? "Profit" : "Days", pnl != null ? `<span class="${sign(pnl)}">${inr(pnl)}</span>${t.qty ? ` · ${t.qty} sh` : ""}` : (t.days ?? "–")],
   ];
   $("#dFacts").innerHTML = facts.map(([l, v]) => `<div class="fact"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
-  const el = $("#dChart");
-  if (dChart) dChart.remove();
-  if (!b) { el.innerHTML = `<div class="empty">No chart data.</div>`; return; }
-  dChart = LightweightCharts.createChart(el, chartOpts(el, {handleScroll: true, handleScale: true}));
-  const cs = dChart.addCandlestickSeries({upColor: css("--good"), downColor: css("--bad"), borderVisible: false,
-    wickUpColor: css("--good"), wickDownColor: css("--bad"), priceLineVisible: false});
-  cs.setData(b.d.map((d, k) => ({time: d, open: b.o[k], high: b.h[k], low: b.l[k], close: b.c[k]})));
-  const ema = dChart.addLineSeries({color: "#f0a020", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false});
-  ema.setData(b.d.map((d, k) => ({time: d, value: b.e[k]})));
-  // the chart uses today's split-adjusted prices; scale trade prices the same way
-  const k0 = b.d.indexOf(t.entry_date), scale = k0 >= 0 && t.entry ? b.o[k0] / t.entry : 1;
-  const mk = [{time: t.signal, position: "belowBar", color: css("--accent"), shape: "arrowUp", text: ""}];
-  if (t.entry_date) mk.push({time: t.entry_date, position: "belowBar", color: css("--accent"), shape: "circle", text: "buy " + px(t.entry)});
-  if (t.exit_date) mk.push({time: t.exit_date, position: "aboveBar", color: t.ret > 0 ? css("--good") : css("--bad"), shape: "arrowDown", text: "sell " + pct(t.ret)});
-  cs.setMarkers(mk.filter(m => b.d.includes(m.time)).sort((x, y) => x.time < y.time ? -1 : 1));
-  if (t.entry) {
-    cs.createPriceLine({price: t.entry * scale, color: css("--accent"), lineStyle: 2, lineWidth: 1, title: "buy"});
-    cs.createPriceLine({price: t.stop * scale, color: css("--bad"), lineStyle: 2, lineWidth: 1, title: "stop"});
-  }
-  const from = Math.max(0, b.d.indexOf(t.signal) - 25), toIdx = t.exit_date ? Math.min(b.d.length - 1, b.d.indexOf(t.exit_date) + 10) : b.d.length - 1;
-  dChart.timeScale().setVisibleRange({from: b.d[from], to: b.d[toIdx]});
-  autosize(dChart, el);
-  rows();
-  $("#detail").scrollIntoView({behavior: "smooth", block: "start"});
+  document.querySelectorAll("#rgSeg button").forEach(x => x.setAttribute("aria-pressed", x.dataset.rg === rg));
+  $("#dlg").showModal();
+  requestAnimationFrame(drawChart);
 }
-$("#dClose").onclick = () => { $("#detail").classList.remove("show"); sel = null; rows(); };
+document.querySelectorAll("#ivSeg button").forEach(b => b.onclick = () => { iv = b.dataset.iv; document.querySelectorAll("#ivSeg button").forEach(x => x.setAttribute("aria-pressed", x === b)); drawChart(); });
+document.querySelectorAll("#rgSeg button").forEach(b => b.onclick = () => { rg = b.dataset.rg; document.querySelectorAll("#rgSeg button").forEach(x => x.setAttribute("aria-pressed", x === b)); drawChart(); });
+$("#zIn").onclick = () => zoom(0.7); $("#zOut").onclick = () => zoom(1.4);
+$("#dClose").onclick = () => $("#dlg").close();
+$("#dlg").addEventListener("click", e => { if (e.target.id === "dlg") $("#dlg").close(); });
 
+/* ---------------- MY VIEW (encrypted) ---------------- */
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function decrypt(blob, pw) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({name: "PBKDF2", salt: b64(blob.salt), iterations: blob.iter, hash: "SHA-256"}, base, {name: "AES-GCM", length: 256}, false, ["decrypt"]);
+  const pt = await crypto.subtle.decrypt({name: "AES-GCM", iv: b64(blob.iv)}, key, b64(blob.data));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+let BLOB;
+async function loadBlob() {
+  if (BLOB !== undefined) return BLOB;
+  try { const r = await fetch("personal.enc.json?v=" + Date.now()); BLOB = r.ok ? await r.json() : null; } catch { BLOB = null; }
+  return BLOB;
+}
+async function unlock(pw, remember) {
+  $("#pwErr").textContent = "Unlocking…";
+  const blob = await loadBlob();
+  if (!blob) { $("#pwErr").textContent = "Your personal view isn't set up yet. It appears after the bot's next run with your password."; return; }
+  try { P = await decrypt(blob, pw); } catch { $("#pwErr").textContent = "Wrong password. Try again."; return; }
+  try { remember ? localStorage.setItem("str100pw", pw) : localStorage.removeItem("str100pw"); } catch {}
+  $("#pwErr").textContent = "";
+  $("#lockBox").classList.add("hidden"); $("#meBody").classList.remove("hidden");
+  renderMe();
+}
+$("#lockForm").onsubmit = e => { e.preventDefault(); unlock($("#pw").value, $("#remember").checked); };
+$("#lockAgain").onclick = () => { P = null; try { localStorage.removeItem("str100pw"); } catch {} $("#meBody").classList.add("hidden"); $("#lockBox").classList.remove("hidden"); $("#pw").value = ""; $("#pwErr").textContent = ""; };
+
+const MY = {suggested: ["Waiting to buy", "good"], bought: ["Holding", "info"], closed: ["Closed", "neutral"], skipped: ["You skipped", "warn"],
+  no_reply: ["No reply", "neutral"], no_slot: ["Slots full", "neutral"]};
+let meChart = null;
+function renderMe() {
+  const s = P.stats, R = P.rows; R.forEach((r, i) => { r._i = i; r.ret = r.ret ?? r.pnl_pct; });
+  $("#meSub").textContent = `Your real trades from Telegram · updated ${P.updated}`;
+  const total = (s.realized || 0) + (s.unrealized || 0);
+  kpiTiles($("#meKpis"), [
+    ["My total profit", `<span class="${sign(total)}">${inr(total)}</span>`, `${inr(s.realized)} booked · ${inr(s.unrealized)} open`],
+    ["Money in stocks now", inr(s.invested), `${s.open} stocks · capital ${inr(s.capital)}`],
+    ["My win rate", s.win_rate == null ? "–" : s.win_rate.toFixed(0) + "%", `${s.wins} of ${s.closed} closed trades`],
+    ["Suggestions followed", s.suggestions ? `${s.took} of ${s.suggestions}` : "–", `${s.skipped} skipped · ${s.own_picks} own picks`],
+  ]);
+  $("#meAlert").innerHTML = s.rule_sell_now?.length ? `<div class="alert">🔴 <b>Rule says sell:</b> ${s.rule_sell_now.join(", ")}. Check your Telegram report.</div>` : "";
+  const el = $("#meChart");
+  if (meChart) { meChart.remove(); meChart = null; }
+  if (P.curve.length) {
+    meChart = LightweightCharts.createChart(el, chartOpts(el, {localization: {priceFormatter: v => inr(v)}}));
+    const ser = meChart.addBaselineSeries({baseValue: {type: "price", price: 0}, lineWidth: 2, topLineColor: css("--good"), topFillColor1: css("--good") + "40", topFillColor2: css("--good") + "08",
+      bottomLineColor: css("--bad"), bottomFillColor1: css("--bad") + "08", bottomFillColor2: css("--bad") + "40", priceLineVisible: false, lastValueVisible: false});
+    ser.setData(P.curve.map(([d, v]) => ({time: d, value: v})));
+    meChart.timeScale().fitContent(); autosize(meChart, el);
+    const last = P.curve.at(-1), leg = (d, v) => $("#meLegend").innerHTML = `<span>${nd(d)}</span><span>Profit so far <b class="${sign(v)}">${inr(v)}</b></span>`;
+    leg(...last); meChart.subscribeCrosshairMove(p => p.time ? leg(p.time, p.seriesData.get(ser)?.value) : leg(...last));
+  } else el.innerHTML = `<div class="empty">Your curve starts after your first buy.</div>`;
+  const closed = R.filter(r => r.status === "closed" && r.ret != null), sk = R.filter(r => ["skipped", "no_reply"].includes(r.status) && r.if_ret != null);
+  const own = R.filter(r => r.how === "own pick" && r.ret != null), sug = R.filter(r => r.how !== "own pick" && ["closed", "bought"].includes(r.status) && r.ret != null);
+  const botWR = D?.stats.win_rate, myWR = s.win_rate, skAvg = avg(sk.map(r => r.if_ret));
+  const lateStops = closed.filter(r => r.ret < -11);
+  insightCards($("#meIns"), [
+    s.suggestions ? ["🎯", `You followed ${Math.round(100 * s.took / s.suggestions)}% of suggestions`, s.took === s.suggestions ? "Full discipline. The rules only work if you take the signals." : `You skipped ${s.skipped}. The rules work over many trades, so skipping some changes your results.`] : null,
+    sk.length ? [skAvg > 0 ? "🙈" : "👏", skAvg > 0 ? "Your skipped stocks would have made money" : "Good skips", `If you had bought the ${sk.length} you skipped, they'd have averaged <b class="${sign(skAvg)}">${pct(skAvg)}</b>.`] : null,
+    myWR != null && botWR != null ? ["⚖️", `Your win rate ${myWR.toFixed(0)}% vs bot ${botWR.toFixed(0)}%`, myWR >= botWR ? "You're doing as well as the rules or better." : "Below the rules. Check whether you sell winners early or skip strong signals."] : null,
+    own.length && sug.length ? ["🧭", "Your own picks vs bot picks", `Own picks avg <b class="${sign(avg(own.map(r => r.ret)))}">${pct(avg(own.map(r => r.ret)))}</b> · bot picks avg <b class="${sign(avg(sug.map(r => r.ret)))}">${pct(avg(sug.map(r => r.ret)))}</b>.`] : null,
+    lateStops.length ? ["⏰", `${lateStops.length} trade(s) lost more than 11%`, "The stop is 10%. Bigger losses usually mean the stop was late or missing. Use a GTT stop-loss order."]
+      : (closed.length ? ["✅", "Stops respected", "No closed trade lost much more than the 10% stop. Keep it that way."] : null),
+  ]);
+  openCards($("#meCards"), R.filter(r => r.status === "bought").map(r => [r, r._i, r.rule_says_sell ? `<br><b class="down">Rule says sell: ${REASON[r.rule_reason] || r.rule_reason}</b>` : (r.trail_active ? `<br>Sell if it closes below ${px(r.ema)}` : "")]), i => openChart(P.rows[i], P.bars));
+  DataTable($("#meTable"), {
+    health: true, defaultSort: "date",
+    chips: [
+      {k: "all", l: "All", f: () => true}, {k: "hold", l: "Holding", f: r => r.status === "bought"},
+      {k: "closed", l: "Closed", f: r => r.status === "closed"}, {k: "skip", l: "Skipped", f: r => ["skipped", "no_reply", "no_slot"].includes(r.status)},
+      {k: "own", l: "Own picks", f: r => r.how === "own pick"}],
+    cols: [{h: "Suggested", sort: "date"}, {h: "Stock", sort: "sym"}, {h: "What you did"}, {h: "Buy", num: 1}, {h: "Sell / now", num: 1},
+      {h: "Return", num: 1, sort: "ret"}, {h: "Profit", num: 1, sort: "pnl"}, {h: "Days", num: 1, sort: "days"}, {h: "Why it ended"}],
+    sorters: {date: r => r.signal_date || r.entry_date, sym: r => r.symbol, ret: r => r.ret ?? r.if_ret, pnl: r => r.pnl_inr, days: r => r.days},
+    rows: () => P.rows, idx: r => r._i, date: r => r.signal_date || r.entry_date, ret: r => r.ret ?? r.if_ret,
+    open: i => openChart(P.rows[i], P.bars),
+    cells: r => {
+      const [st, tone] = r.how === "own pick" && r.status !== "closed" ? ["Own pick", "info"] : (MY[r.status] || [r.status, "neutral"]);
+      const ret = r.ret ?? r.if_ret, hypo = r.ret == null && r.if_ret != null;
+      return `<td>${nd(r.signal_date || r.entry_date)}</td><td class="sym">${r.symbol}</td><td><span class="pill ${tone}">${st}</span></td>
+        <td class="num">${px(r.entry_price)}</td><td class="num">${px(r.exit_price ?? r.now)}</td>
+        <td class="num"><span class="${sign(ret)}">${ret == null ? "–" : arrow(ret) + " " + pct(ret)}</span>${hypo ? ` <span style="color:var(--muted);font-size:12px">if bought</span>` : ""}</td>
+        <td class="num ${sign(r.pnl_inr)}">${inr(r.pnl_inr)}</td><td class="num">${r.days ?? "–"}</td><td>${REASON[r.reason] || (r.status === "bought" ? "Still holding" : "–")}</td>`;
+    }});
+}
+
+/* ---------------- tabs + boot ---------------- */
+function showView(me) {
+  $("#tabBot").setAttribute("aria-selected", !me); $("#tabMe").setAttribute("aria-selected", me);
+  $("#botView").classList.toggle("hidden", me); $("#myView").classList.toggle("hidden", !me);
+  try { localStorage.setItem("str100view", me ? "me" : "bot"); } catch {}
+  if (me && !P) { let pw = null; try { pw = localStorage.getItem("str100pw"); } catch {} if (pw) { $("#remember").checked = true; unlock(pw, true); } }
+}
+$("#tabBot").onclick = () => showView(false); $("#tabMe").onclick = () => showView(true);
 function foot() {
   const r = D.rules, s = D.stats;
-  $("#foot").innerHTML = `<b>Rules used:</b> buy the day after an STR100 signal, only when market health is ${r.health_min}%+ ·
-    ${r.slots} stocks max, capital ÷ ${r.slots} each, calmest candle first · stop loss ${r.stop}% · after day ${r.trail_after} sell on a close below the 20 day average · sell after ${r.max_hold} days.<br>
-    ${s.signals} signals so far: ${s.skipped_weak} skipped for weak market, ${s.skipped_slot} skipped because slots were full.<br>
-    These are <b>simulated</b> trades, not real orders. Past results do not promise future returns. Not financial advice. Data: Chartink.`;
+  $("#foot").innerHTML = `<b>Rules:</b> buy the day after an STR100 signal only when market health is ${r.health_min}%+ · max ${r.slots} stocks, capital ÷ ${r.slots} each, calmest candle first · stop loss ${r.stop}% · from day ${r.trail_after} sell on a close below the 20 day average · sell after ${r.max_hold} days.<br>
+    ${s.signals} signals so far: ${s.skipped_weak} skipped for weak market, ${s.skipped_slot} because slots were full.<br>
+    Bot results are <b>simulated</b>. Past results don't promise future returns. Not financial advice. Data: Chartink. Charts: TradingView Lightweight Charts.`;
 }
-
 fetch("data.json?v=" + Date.now()).then(r => r.json()).then(d => {
-  D = d; kpis(); equityChart(); healthChart(); openCards(); tabs(); rows(); foot();
+  D = d; botKpis(); equityChart(); healthChart(); botInsights();
+  openCards($("#openCards"), D.trades.map((t, i) => [t, i]).filter(([t]) => t.status === "taken" && !t.exit_date), i => openChart(D.trades[i], D.bars));
+  botTable(); foot();
+  let v = "bot"; try { v = localStorage.getItem("str100view") || "bot"; } catch {}
+  if (v === "me") showView(true);
 }).catch(e => { $("#sub").textContent = "Could not load data: " + e; });
 </script>
 </body>
