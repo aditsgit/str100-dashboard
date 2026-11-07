@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STR100 Bot Dashboard</title>
+<meta name="description" content="Paper-trading results of the STR100 + Market Health rules, updated every trading day.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f6f6f4; --surface:#fcfcfb; --surface-2:#f0efec; --border:#e4e3df;
+  --text:#0b0b0b; --text-2:#52514e; --muted:#8a8984;
+  --accent:#2a78d6; --bench:#8a8984;
+  --good:#0f8a4b; --good-bg:#e5f4ec; --bad:#c93a3a; --bad-bg:#fbeaea;
+  --warn:#a86b00; --warn-bg:#fdf3dc; --grid:#ecebe7;
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#111110; --surface:#1a1a19; --surface-2:#232321; --border:#2e2d2b;
+    --text:#f0efec; --text-2:#c3c2b7; --muted:#8d8c86;
+    --accent:#3987e5; --bench:#8d8c86;
+    --good:#3fbf7f; --good-bg:#16301f; --bad:#ef6b6b; --bad-bg:#3a1b1b;
+    --warn:#e0a63a; --warn-bg:#352a12; --grid:#252523;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#111110; --surface:#1a1a19; --surface-2:#232321; --border:#2e2d2b;
+  --text:#f0efec; --text-2:#c3c2b7; --muted:#8d8c86;
+  --accent:#3987e5; --bench:#8d8c86;
+  --good:#3fbf7f; --good-bg:#16301f; --bad:#ef6b6b; --bad-bg:#3a1b1b;
+  --warn:#e0a63a; --warn-bg:#352a12; --grid:#252523;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:24px 16px 64px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+h1{font-size:26px;line-height:1.2;margin:0;letter-spacing:-.02em}
+.sub{color:var(--text-2);margin-top:4px;font-size:14px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:13px;font-weight:600;white-space:nowrap}
+.pill.good{background:var(--good-bg);color:var(--good)} .pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.neutral{background:var(--surface-2);color:var(--text-2)}
+.card{min-width:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:860px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi .label{color:var(--text-2);font-size:13px}
+.kpi .value{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .note{font-size:13px;color:var(--muted);margin-top:2px}
+.up{color:var(--good)} .down{color:var(--bad)}
+section{margin-top:22px}
+h2{font-size:17px;margin:0 0 4px} .h2sub{color:var(--text-2);font-size:13px;margin-bottom:12px}
+.chartbox{position:relative;height:280px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--text-2);margin-bottom:8px}
+.legend b{color:var(--text);font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:12px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.two{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
+@media (max-width:860px){.two{grid-template-columns:1fr}}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.tab{border:1px solid var(--border);background:var(--surface);color:var(--text-2);padding:6px 12px;border-radius:999px;font:inherit;font-size:13px;cursor:pointer}
+.tab[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface)}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th{text-align:left;font-weight:600;color:var(--text-2);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--surface-2)}
+td{padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+tr.row{cursor:pointer} tr.row:hover td{background:var(--surface-2)}
+tr.sel td{background:var(--surface-2)}
+td.num,th.num{text-align:right}
+.sym{font-weight:600}
+.open-cards{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+.oc{cursor:pointer;transition:border-color .15s}.oc:hover{border-color:var(--accent)}
+.oc .top{display:flex;justify-content:space-between;align-items:baseline}
+.oc .big{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.oc .meta{color:var(--text-2);font-size:13px;margin-top:6px}
+.bar{height:6px;border-radius:3px;background:var(--surface-2);margin-top:10px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent);border-radius:3px}
+#detail{display:none}
+#detail.show{display:block}
+.dhead{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:10px}
+.facts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+@media (max-width:640px){.facts{grid-template-columns:repeat(2,1fr)}}
+.fact{background:var(--surface-2);border-radius:10px;padding:10px 12px}
+.fact .l{font-size:12px;color:var(--text-2)} .fact .v{font-weight:600;font-variant-numeric:tabular-nums}
+.btn{border:1px solid var(--border);background:var(--surface);color:var(--text);padding:6px 12px;border-radius:10px;font:inherit;font-size:13px;cursor:pointer;text-decoration:none}
+.foot{color:var(--muted);font-size:13px;margin-top:28px;line-height:1.6}
+.empty{color:var(--text-2);padding:16px}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>STR100 Bot · Paper Portfolio</h1>
+      <div class="sub" id="sub">Loading…</div>
+    </div>
+    <div id="mood"></div>
+  </header>
+
+  <div class="grid kpis" id="kpis"></div>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>Portfolio vs Nifty 50</h2>
+      <div class="h2sub">₹5,00,000 starting money, following every rule</div>
+      <div class="legend" id="eqLegend"></div>
+      <div class="chartbox" id="eqChart"></div>
+    </div>
+    <div class="card">
+      <h2>Market health</h2>
+      <div class="h2sub">% of liquid stocks above their 50 day average. Buys only at 50%+</div>
+      <div class="legend" id="hLegend"></div>
+      <div class="chartbox" id="hChart"></div>
+    </div>
+  </section>
+
+  <section id="detail" class="card" aria-live="polite">
+    <div class="dhead">
+      <div>
+        <h2 id="dTitle"></h2>
+        <div class="h2sub" id="dSub"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <a class="btn" id="dTv" target="_blank" rel="noopener">Open in TradingView ↗</a>
+        <button class="btn" id="dClose">Close</button>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="background:#f0a020"></span>20 day average</span>
+      <span>⬆ signal &nbsp; ● buy &nbsp; ⬇ sell</span>
+      <span><span class="sw" style="background:var(--bad)"></span>stop loss</span>
+    </div>
+    <div class="chartbox" id="dChart" style="height:340px"></div>
+    <div class="facts" id="dFacts"></div>
+  </section>
+
+  <section>
+    <h2>Holding now</h2>
+    <div class="h2sub">Paper positions still open. Tap one to see its chart</div>
+    <div class="grid open-cards" id="openCards"></div>
+  </section>
+
+  <section>
+    <h2>Every signal and what happened</h2>
+    <div class="h2sub">Tap any row to see the chart with buy and sell points</div>
+    <div class="tabs" role="group" aria-label="Filter trades" id="tabs"></div>
+    <div class="tablewrap"><table>
+      <thead><tr>
+        <th>Signal</th><th>Stock</th><th class="num">Health</th><th>Result</th>
+        <th class="num">Buy</th><th class="num">Sell / Now</th><th class="num">Return</th>
+        <th class="num">Days</th><th>Why it ended</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const inr = x => x == null ? "–" : "₹" + Math.round(x).toLocaleString("en-IN");
+const px = x => x == null ? "–" : "₹" + Number(x).toLocaleString("en-IN", {maximumFractionDigits: x < 100 ? 2 : 1});
+const pct = (x, d = 1) => x == null ? "–" : (x > 0 ? "+" : "") + x.toFixed(d) + "%";
+const sign = x => x > 0 ? "up" : x < 0 ? "down" : "";
+const arrow = x => x > 0 ? "▲" : x < 0 ? "▼" : "";
+const nd = d => { if (!d) return "–"; const t = new Date(d + "T00:00:00"); return t.toLocaleDateString("en-IN", {day: "numeric", month: "short"}); };
+const REASON = {stop: "Stop loss hit", stop_gap: "Opened below stop", trail: "Closed below 20 day avg", time: "40 days done", open: "Still holding"};
+const STATUS = {
+  taken: ["Bought", "neutral"], weak_market: ["Skipped: weak market", "warn"],
+  no_slot: ["Skipped: 10 slots full", "neutral"], holding: ["Already holding", "neutral"],
+  pending: ["Buy at next open", "good"], no_data: ["No price data", "neutral"], no_cash: ["No cash left", "neutral"]
+};
+let D, sel = null, dChart = null;
+
+function chartOpts(el, extra = {}) {
+  return Object.assign({
+    width: el.clientWidth, height: el.clientHeight,
+    layout: {background: {type: "solid", color: "transparent"}, textColor: css("--text-2"), fontFamily: "Inter, system-ui", fontSize: 12},
+    grid: {vertLines: {visible: false}, horzLines: {color: css("--grid")}},
+    rightPriceScale: {borderVisible: false}, timeScale: {borderVisible: false},
+    crosshair: {mode: 1}, handleScroll: false, handleScale: false,
+  }, extra);
+}
+function autosize(chart, el) { new ResizeObserver(() => chart.applyOptions({width: el.clientWidth, height: el.clientHeight})).observe(el); }
+
+function kpis() {
+  const s = D.stats, t = D.today;
+  const tiles = [
+    ["Paper portfolio", inr(s.value), `<span class="${sign(s.ret)}">${arrow(s.ret)} ${pct(s.ret)}</span> since ${nd(D.equity[0]?.[0])}`],
+    ["Nifty 50, same period", pct(s.nifty_ret), `<span class="${sign(s.ret - s.nifty_ret)}">${pct(s.ret - s.nifty_ret)} vs Nifty</span>`],
+    ["Win rate", s.win_rate == null ? "–" : s.win_rate.toFixed(0) + "%", `${s.wins} wins of ${s.closed} closed · avg win ${pct(s.avg_win)}, avg loss ${pct(s.avg_loss)}`],
+    ["Biggest fall from top", pct(s.max_dd), `${s.open} open now · ${inr(s.unrealized)} unrealised`],
+  ];
+  $("#kpis").innerHTML = tiles.map(([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="note">${n}</div></div>`).join("");
+  const healthy = t.pct >= D.rules.health_min;
+  $("#mood").innerHTML = `<span class="pill ${healthy ? "good" : "bad"}">${healthy ? "● Healthy market" : "● Weak market"} · ${t.pct.toFixed(0)}%</span>`;
+  $("#sub").textContent = `Simulated trades from the bot's rules · updated ${D.updated}`;
+}
+
+function equityChart() {
+  const el = $("#eqChart");
+  const c = LightweightCharts.createChart(el, chartOpts(el, {localization: {priceFormatter: v => "₹" + (v / 100000).toFixed(2) + "L"}}));
+  const a = c.addLineSeries({color: css("--accent"), lineWidth: 2, priceLineVisible: false, lastValueVisible: false});
+  const b = c.addLineSeries({color: css("--bench"), lineWidth: 2, lineStyle: 2, priceLineVisible: false, lastValueVisible: false});
+  a.setData(D.equity.map(r => ({time: r[0], value: r[1]})));
+  b.setData(D.equity.map(r => ({time: r[0], value: r[2]})));
+  c.timeScale().fitContent(); autosize(c, el);
+  const last = D.equity[D.equity.length - 1];
+  const leg = (d, v1, v2) => $("#eqLegend").innerHTML =
+    `<span><span class="sw" style="background:var(--accent)"></span>Bot <b>${inr(v1)}</b></span>` +
+    `<span><span class="sw" style="background:var(--bench)"></span>Nifty 50 <b>${inr(v2)}</b></span><span>${nd(d)}</span>`;
+  leg(last[0], last[1], last[2]);
+  c.subscribeCrosshairMove(p => {
+    if (!p.time) return leg(last[0], last[1], last[2]);
+    leg(p.time, p.seriesData.get(a)?.value, p.seriesData.get(b)?.value);
+  });
+}
+
+function healthChart() {
+  const el = $("#hChart");
+  const c = LightweightCharts.createChart(el, chartOpts(el, {localization: {priceFormatter: v => v.toFixed(0) + "%"}}));
+  const s = c.addBaselineSeries({
+    baseValue: {type: "price", price: D.rules.health_min}, lineWidth: 2,
+    topLineColor: css("--good"), topFillColor1: css("--good") + "44", topFillColor2: css("--good") + "08",
+    bottomLineColor: css("--bad"), bottomFillColor1: css("--bad") + "08", bottomFillColor2: css("--bad") + "44",
+    priceLineVisible: false, lastValueVisible: false,
+  });
+  s.setData(D.health.map(r => ({time: r[0], value: r[1]})));
+  s.createPriceLine({price: D.rules.health_min, color: css("--muted"), lineStyle: 2, lineWidth: 1, axisLabelVisible: true, title: "buy line"});
+  c.timeScale().fitContent(); autosize(c, el);
+  const last = D.health[D.health.length - 1];
+  const leg = (d, v) => $("#hLegend").innerHTML = `<span>${nd(d)}</span><span>Health <b>${v == null ? "–" : v.toFixed(1) + "%"}</b> ${v >= D.rules.health_min ? "· okay to buy" : "· no new buys"}</span>`;
+  leg(last[0], last[1]);
+  c.subscribeCrosshairMove(p => p.time ? leg(p.time, p.seriesData.get(s)?.value) : leg(last[0], last[1]));
+}
+
+function openCards() {
+  const open = D.trades.filter(t => t.status === "taken" && !t.exit_date);
+  if (!open.length) { $("#openCards").innerHTML = `<div class="card empty">No open positions right now.</div>`; return; }
+  $("#openCards").innerHTML = open.map(t => {
+    const i = D.trades.indexOf(t), prog = Math.min(100, 100 * t.days / D.rules.max_hold);
+    return `<div class="card oc" data-i="${i}" tabindex="0">
+      <div class="top"><span class="sym">${t.symbol}</span><span class="big ${sign(t.ret)}">${arrow(t.ret)} ${pct(t.ret)}</span></div>
+      <div class="meta">Bought ${nd(t.entry_date)} at ${px(t.entry)} · now ${px(t.now)}<br>${t.qty} shares · ${inr(t.pnl)} · stop ${px(t.stop)}</div>
+      <div class="bar" title="day ${t.days} of ${D.rules.max_hold}"><i style="width:${prog}%"></i></div>
+      <div class="meta">Day ${t.days} of ${D.rules.max_hold}</div></div>`;
+  }).join("");
+  document.querySelectorAll(".oc").forEach(el => el.onclick = el.onkeydown = e => { if (e.type === "click" || e.key === "Enter") showDetail(+el.dataset.i); });
+}
+
+const FILTERS = [
+  ["taken", "Bought", t => t.status === "taken"],
+  ["open", "Holding now", t => t.status === "taken" && !t.exit_date],
+  ["wins", "Winners", t => t.status === "taken" && t.exit_date && t.ret > 0],
+  ["losses", "Losers", t => t.status === "taken" && t.exit_date && t.ret <= 0],
+  ["skipped", "Skipped", t => ["weak_market", "no_slot"].includes(t.status)],
+  ["all", "All signals", t => true],
+];
+let filter = "taken";
+function tabs() {
+  $("#tabs").innerHTML = FILTERS.map(([k, l, f]) => `<button class="tab" aria-pressed="${k === filter}" data-k="${k}">${l} <span style="opacity:.6">${D.trades.filter(f).length}</span></button>`).join("");
+  document.querySelectorAll(".tab").forEach(b => b.onclick = () => { filter = b.dataset.k; tabs(); rows(); });
+}
+function rows() {
+  const f = FILTERS.find(x => x[0] === filter)[2];
+  const list = D.trades.map((t, i) => [t, i]).filter(([t]) => f(t)).reverse();
+  if (!list.length) { $("#rows").innerHTML = `<tr><td colspan="9" class="empty">Nothing here yet.</td></tr>`; return; }
+  $("#rows").innerHTML = list.map(([t, i]) => {
+    const [st, tone] = STATUS[t.status] || [t.status, "neutral"];
+    const hypo = t.status !== "taken" && t.ret != null;
+    const ret = t.ret == null ? "–" : `<span class="${sign(t.ret)}">${arrow(t.ret)} ${pct(t.ret)}</span>${hypo ? ` <span style="color:var(--muted)">if bought</span>` : ""}`;
+    return `<tr class="row ${sel === i ? "sel" : ""}" data-i="${i}" tabindex="0">
+      <td>${nd(t.signal)}</td><td class="sym">${t.symbol}</td>
+      <td class="num"><span class="${t.health >= D.rules.health_min ? "up" : "down"}">${t.health == null ? "–" : t.health.toFixed(0) + "%"}</span></td>
+      <td><span class="pill ${tone}">${st}</span></td>
+      <td class="num">${px(t.entry)}</td><td class="num">${px(t.exit ?? t.now)}</td>
+      <td class="num">${ret}</td><td class="num">${t.days ?? "–"}</td>
+      <td>${REASON[t.reason] || "–"}</td></tr>`;
+  }).join("");
+  document.querySelectorAll("tr.row").forEach(el => el.onclick = el.onkeydown = e => { if (e.type === "click" || e.key === "Enter") showDetail(+el.dataset.i); });
+}
+
+function showDetail(i) {
+  sel = i; const t = D.trades[i], b = D.bars[t.symbol];
+  $("#detail").classList.add("show");
+  $("#dTitle").textContent = t.symbol;
+  const [st] = STATUS[t.status] || [t.status];
+  $("#dSub").textContent = `Signal ${nd(t.signal)} at ${t.health?.toFixed(0)}% market health · ${st}`;
+  $("#dTv").href = `https://www.tradingview.com/chart/?symbol=NSE:${t.symbol.replace("&", "_")}`;
+  const facts = [
+    ["Bought", t.entry_date ? `${px(t.entry)} · ${nd(t.entry_date)}` : "–"],
+    [t.exit_date ? "Sold" : "Now", t.exit_date ? `${px(t.exit)} · ${nd(t.exit_date)}` : px(t.now)],
+    ["Return", `<span class="${sign(t.ret)}">${arrow(t.ret)} ${pct(t.ret)}</span>`],
+    [t.status === "taken" ? "Profit" : "Days", t.status === "taken" ? `<span class="${sign(t.pnl)}">${inr(t.pnl)}</span> (${t.qty} sh)` : (t.days ?? "–")],
+  ];
+  $("#dFacts").innerHTML = facts.map(([l, v]) => `<div class="fact"><div class="l">${l}</div><div class="v">${v}</div></div>`).join("");
+  const el = $("#dChart");
+  if (dChart) dChart.remove();
+  if (!b) { el.innerHTML = `<div class="empty">No chart data.</div>`; return; }
+  dChart = LightweightCharts.createChart(el, chartOpts(el, {handleScroll: true, handleScale: true}));
+  const cs = dChart.addCandlestickSeries({upColor: css("--good"), downColor: css("--bad"), borderVisible: false,
+    wickUpColor: css("--good"), wickDownColor: css("--bad"), priceLineVisible: false});
+  cs.setData(b.d.map((d, k) => ({time: d, open: b.o[k], high: b.h[k], low: b.l[k], close: b.c[k]})));
+  const ema = dChart.addLineSeries({color: "#f0a020", lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false});
+  ema.setData(b.d.map((d, k) => ({time: d, value: b.e[k]})));
+  // the chart uses today's split-adjusted prices; scale trade prices the same way
+  const k0 = b.d.indexOf(t.entry_date), scale = k0 >= 0 && t.entry ? b.o[k0] / t.entry : 1;
+  const mk = [{time: t.signal, position: "belowBar", color: css("--accent"), shape: "arrowUp", text: ""}];
+  if (t.entry_date) mk.push({time: t.entry_date, position: "belowBar", color: css("--accent"), shape: "circle", text: "buy " + px(t.entry)});
+  if (t.exit_date) mk.push({time: t.exit_date, position: "aboveBar", color: t.ret > 0 ? css("--good") : css("--bad"), shape: "arrowDown", text: "sell " + pct(t.ret)});
+  cs.setMarkers(mk.filter(m => b.d.includes(m.time)).sort((x, y) => x.time < y.time ? -1 : 1));
+  if (t.entry) {
+    cs.createPriceLine({price: t.entry * scale, color: css("--accent"), lineStyle: 2, lineWidth: 1, title: "buy"});
+    cs.createPriceLine({price: t.stop * scale, color: css("--bad"), lineStyle: 2, lineWidth: 1, title: "stop"});
+  }
+  const from = Math.max(0, b.d.indexOf(t.signal) - 25), toIdx = t.exit_date ? Math.min(b.d.length - 1, b.d.indexOf(t.exit_date) + 10) : b.d.length - 1;
+  dChart.timeScale().setVisibleRange({from: b.d[from], to: b.d[toIdx]});
+  autosize(dChart, el);
+  rows();
+  $("#detail").scrollIntoView({behavior: "smooth", block: "start"});
+}
+$("#dClose").onclick = () => { $("#detail").classList.remove("show"); sel = null; rows(); };
+
+function foot() {
+  const r = D.rules, s = D.stats;
+  $("#foot").innerHTML = `<b>Rules used:</b> buy the day after an STR100 signal, only when market health is ${r.health_min}%+ ·
+    ${r.slots} stocks max, capital ÷ ${r.slots} each, calmest candle first · stop loss ${r.stop}% · after day ${r.trail_after} sell on a close below the 20 day average · sell after ${r.max_hold} days.<br>
+    ${s.signals} signals so far: ${s.skipped_weak} skipped for weak market, ${s.skipped_slot} skipped because slots were full.<br>
+    These are <b>simulated</b> trades, not real orders. Past results do not promise future returns. Not financial advice. Data: Chartink.`;
+}
+
+fetch("data.json?v=" + Date.now()).then(r => r.json()).then(d => {
+  D = d; kpis(); equityChart(); healthChart(); openCards(); tabs(); rows(); foot();
+}).catch(e => { $("#sub").textContent = "Could not load data: " + e; });
+</script>
+</body>
+</html>
