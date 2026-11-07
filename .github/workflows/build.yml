@@ -1,0 +1,32 @@
+name: Update dashboard
+
+on:
+  schedule:
+    - cron: "17 11 * * 1-5"   # 4:47 pm IST, Mon-Fri (after the market closes)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dashboard
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python build_dashboard.py
+      - name: Publish new data
+        run: |
+          git config user.name "str100-dashboard"
+          git config user.email "str100-dashboard@users.noreply.github.com"
+          git add data.json
+          git diff --cached --quiet || git commit -m "update data $(date -u +%F)"
+          git push
