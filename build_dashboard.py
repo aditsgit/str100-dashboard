@@ -71,6 +71,8 @@ def simulate(health, signals, bars_by_sym, nifty, capital=CAPITAL):
                              ret=r2(100 * (res["price"] / entry_adj - 1)),
                              days=(res["idx"] - ei), stop=r2(entry_adj / f_e * (1 - S.STOP_PCT / 100)))
                     t["exit"] = r2(t["entry"] * (1 + t["ret"] / 100))
+                    if res["status"] != "exit":
+                        t["exit"], t["now"] = None, r2(t["entry"] * (1 + t["ret"] / 100))
                     t["_exit_idx"], t["_entry_adj"], t["_ei"] = res["idx"], entry_adj, ei
                 if sym in open_pos:
                     t["status"] = "holding"
