@@ -631,7 +631,7 @@ $("#lockForm").onsubmit = e => { e.preventDefault(); unlock($("#pw").value, $("#
 $("#lockAgain").onclick = () => { P = null; try { localStorage.removeItem("str100pw"); } catch {} $("#meBody").classList.add("hidden"); $("#lockBox").classList.remove("hidden"); $("#pw").value = ""; $("#pwErr").textContent = ""; };
 
 const MY = {suggested: ["Waiting to buy", "good"], bought: ["Holding", "info"], closed: ["Closed", "neutral"], skipped: ["You skipped", "warn"],
-  no_reply: ["No reply", "neutral"], no_slot: ["Slots full", "neutral"]};
+  no_reply: ["No reply", "neutral"], no_slot: ["Slots full", "neutral"], repeat: ["Signalled again (already had it)", "neutral"]};
 let meChart = null;
 function applyMeFees() {
   P._b ||= {stats: P.stats, curve: P.curve, rows: P.rows.map(r => ({ret: r.ret ?? r.pnl_pct, pnl: r.pnl_inr}))};
