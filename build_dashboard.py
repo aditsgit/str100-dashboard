@@ -42,59 +42,6 @@ def simulate(health, signals, bars_by_sym, nifty, capital=CAPITAL):
     held_until = {}    # sym -> exit date (for "already holding" status)
 
     for k, day in enumerate(days):
-        # 1) new buys at today's open, from yesterday's signals
-        if k > 0:
-            prev = days[k - 1]
-            todays = []
-            for sym in signals.get(prev, []):
-                t = dict(symbol=sym, signal=prev, health=r2(health.get(prev)))
-                a = adj.get(sym)
-                if a is None or prev not in a["d"]:
-                    t["status"] = "no_data"
-                    trades.append(t)
-                    continue
-                i = a["d"].index(prev)
-                t["range"] = S.candle_range(a, i)
-                todays.append((t, a, i))
-            todays.sort(key=lambda x: x[0]["range"])
-            for t, a, i in todays:
-                sym = t["symbol"]
-                ei = i + 1
-                # what would have happened (also for skipped signals)
-                if ei < len(a["c"]):
-                    entry_adj = a["o"][ei]
-                    res = S.walk(a, ei, entry_adj, entry_adj * (1 - S.STOP_PCT / 100))
-                    f_e = a["factor"][ei]
-                    t.update(entry_date=a["d"][ei], entry=r2(entry_adj / f_e),
-                             exit_date=a["d"][res["idx"]] if res["status"] == "exit" else None,
-                             reason=res["reason"] or "open",
-                             ret=r2(100 * (res["price"] / entry_adj - 1)),
-                             days=(res["idx"] - ei), stop=r2(entry_adj / f_e * (1 - S.STOP_PCT / 100)))
-                    t["exit"] = r2(t["entry"] * (1 + t["ret"] / 100))
-                    if res["status"] != "exit":
-                        t["exit"], t["now"] = None, r2(t["entry"] * (1 + t["ret"] / 100))
-                    t["_exit_idx"], t["_entry_adj"], t["_ei"] = res["idx"], entry_adj, ei
-                if sym in open_pos:
-                    t["status"] = "holding"
-                elif (t.get("health") or 0) < S.HEALTH_MIN:
-                    t["status"] = "weak_market"
-                elif not S.can_buy(health, prev):
-                    t["status"] = "falling_market"
-                elif "entry" not in t:
-                    t["status"] = "pending"
-                elif len(open_pos) >= S.MAX_POSITIONS:
-                    t["status"] = "no_slot"
-                else:
-                    qty = int(min(slot_size, cash) // t["entry"]) if t["entry"] else 0
-                    if qty <= 0:
-                        t["status"] = "no_cash"
-                    else:
-                        t["status"] = "taken"
-                        t["qty"] = qty
-                        cash -= qty * t["entry"]
-                        open_pos[sym] = t
-                trades.append(t)
-
         # 2) exits during today
         for sym, t in list(open_pos.items()):
             a = adj[sym]
@@ -103,7 +50,62 @@ def simulate(health, signals, bars_by_sym, nifty, capital=CAPITAL):
                 t["pnl"] = r2(t["qty"] * (t["exit"] - t["entry"]))
                 del open_pos[sym]
 
-        # 3) mark to market at close
+        # 3) new buys at today's close (3:07 pm alert), from today's signals
+        todays = []
+        for sym in signals.get(day, []):
+            t = dict(symbol=sym, signal=day, health=r2(health.get(day)))
+            a = adj.get(sym)
+            if a is None or day not in a["d"]:
+                t["status"] = "no_data"
+                trades.append(t)
+                continue
+            i = a["d"].index(day)
+            t["range"] = S.candle_range(a, i)
+            todays.append((t, a, i))
+        todays.sort(key=lambda x: x[0]["range"])
+        for t, a, i in todays:
+            sym = t["symbol"]
+            # what would have happened (also for skipped signals)
+            entry_adj = a["c"][i]
+            if i + 1 < len(a["c"]):
+                res = S.walk(a, i + 1, entry_adj, entry_adj * (1 - S.STOP_PCT / 100), base=i, gap_first=True)
+            else:
+                res = dict(status="open", reason=None, idx=i, price=entry_adj)
+            f_e = a["factor"][i]
+            t.update(entry_date=day, entry=r2(entry_adj / f_e),
+                     exit_date=a["d"][res["idx"]] if res["status"] == "exit" else None,
+                     reason=res["reason"] or "open",
+                     ret=r2(100 * (res["price"] / entry_adj - 1)),
+                     days=(res["idx"] - i), stop=r2(entry_adj / f_e * (1 - S.STOP_PCT / 100)))
+            t["exit"] = r2(t["entry"] * (1 + t["ret"] / 100))
+            if res["status"] != "exit":
+                t["exit"], t["now"] = None, r2(t["entry"] * (1 + t["ret"] / 100))
+            t["_entry_adj"] = entry_adj
+            why = S.skip_reason(a, i)
+            if sym in open_pos:
+                t["status"] = "holding"
+            elif (t.get("health") or 0) < S.HEALTH_MIN:
+                t["status"] = "weak_market"
+            elif not S.can_buy(health, day):
+                t["status"] = "falling_market"
+            elif why:
+                t["status"], t["why"] = "filtered", why
+            elif S.upper_locked(a, i):
+                t["status"] = "locked"
+            elif len(open_pos) >= S.MAX_POSITIONS:
+                t["status"] = "no_slot"
+            else:
+                qty = int(min(slot_size, cash) // t["entry"]) if t["entry"] else 0
+                if qty <= 0:
+                    t["status"] = "no_cash"
+                else:
+                    t["status"] = "taken"
+                    t["qty"] = qty
+                    cash -= qty * t["entry"]
+                    open_pos[sym] = t
+            trades.append(t)
+
+        # 4) mark to market at close
         val = cash
         for sym, t in open_pos.items():
             a = adj[sym]
@@ -147,6 +149,7 @@ def simulate(health, signals, bars_by_sym, nifty, capital=CAPITAL):
         max_dd=r2(100 * dd), signals=len(trades),
         skipped_weak=sum(t["status"] == "weak_market" for t in trades),
         skipped_falling=sum(t["status"] == "falling_market" for t in trades),
+        skipped_filtered=sum(t["status"] in ("filtered", "locked") for t in trades),
         skipped_slot=sum(t["status"] == "no_slot" for t in trades),
         realized=r2(sum(t.get("pnl") or 0 for t in closed)),
         unrealized=r2(sum(t.get("pnl") or 0 for t in open_pos.values())),
