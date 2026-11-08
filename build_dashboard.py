@@ -166,6 +166,54 @@ def pack_bars(raw, start_date):
     }
 
 
+HIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history.json")
+HIST_BARS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history_bars.json")
+
+
+def _load(path, default):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:  # noqa
+        return default
+
+
+def _merge_bars(old, new):
+    """Union two raw bar sets by date (new values win). Keeps o/h/l/c/(v)."""
+    keys = ("o", "h", "l", "c", "v")
+    rows = {}
+    for src in (old or {}, new or {}):
+        for i, d in enumerate(src.get("d", [])):
+            rows[d] = [src[k][i] if k in src and i < len(src[k]) else None for k in keys]
+    ds = sorted(rows)
+    out = {"d": ds}
+    for n, k in enumerate(keys):
+        col = [rows[d][n] for d in ds]
+        if any(x is not None for x in col):
+            out[k] = col
+    return out
+
+
+def save_history(h, signals, bars, nifty):
+    """Chartink only keeps ~160 days. Keep our own copy forever, growing every day,
+    so the strategy can be re-tested on a longer period later."""
+    hist = _load(HIST, {"health": {}, "signals": {}})
+    for d, v in h.items():
+        hist["health"][d] = list(v)
+    for d, v in signals.items():
+        hist["signals"][d] = list(v)
+    hist["updated"] = datetime.now(IST).strftime("%Y-%m-%d %H:%M IST")
+    hist["days"] = len(hist["health"])
+    with open(HIST, "w") as f:
+        json.dump(hist, f, separators=(",", ":"), sort_keys=True)
+    hb = _load(HIST_BARS, {})
+    for sym, b in list(bars.items()) + [("NIFTY", nifty)]:
+        hb[sym] = _merge_bars(hb.get(sym), b)
+    with open(HIST_BARS, "w") as f:
+        json.dump(hb, f, separators=(",", ":"), sort_keys=True)
+    print(f"history: {hist['days']} days of health, {len(hb)} stocks of prices")
+
+
 def build(ck):
     h = ck.market_health()
     health = {d: v[2] for d, v in h.items()}
@@ -178,6 +226,10 @@ def build(ck):
             bars[s] = ck.ohlc(s)
         except Exception as e:  # noqa
             print("skip", s, e, file=sys.stderr)
+    try:
+        save_history(h, signals, bars, nifty)
+    except Exception as e:  # noqa  (history must never break the dashboard)
+        print("history save failed:", e, file=sys.stderr)
     trades, equity, stats = simulate(health, signals, bars, nifty)
 
     first_sig = {}
