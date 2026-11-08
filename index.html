@@ -339,7 +339,7 @@ function resim() {
     t._b ||= {ret: t.ret, pnl: t.pnl, qty: t.qty, now: t.now, status: t.status, exit: t.exit};
     Object.assign(t, {ret: t._b.ret, pnl: t._b.pnl, qty: t._b.qty, now: t._b.now, status: t._b.status, exit: t._b.exit, fee: null, _done: 0, _bf: 0});
   });
-  const pxAt = (t, d) => { const b = D.bars[t.symbol]; if (!b) return null; const k0 = b.d.indexOf(t.entry_date), j = b.d.indexOf(d); return k0 < 0 || j < 0 ? null : t.entry * b.c[j] / b.o[k0]; };
+  const pxAt = (t, d) => { const b = D.bars[t.symbol]; if (!b) return null; const k0 = b.d.indexOf(t.entry_date), j = b.d.indexOf(d); return k0 < 0 || j < 0 ? null : t.entry * b.c[j] / (t.signal === t.entry_date ? b.c[k0] : b.o[k0]); };
   const taken = D.trades.filter(t => t._b.status === "taken");
   const open = new Set(); let cash = cap, paid = 0; const eq = [];
   base.equity.forEach(([d, , n]) => {
@@ -408,7 +408,7 @@ $("#feeIn").onchange = e => { SET.fees = e.target.checked; saveSet(); rerender()
 
 /* ---------------- BOT VIEW ---------------- */
 const STATUS = {
-  taken: ["Bot bought", "info"], weak_market: ["Skipped · weak market", "warn"], falling_market: ["Skipped · health falling", "warn"], no_slot: ["Skipped · slots full", "neutral"],
+  taken: ["Bot bought", "info"], weak_market: ["Skipped · weak market", "warn"], falling_market: ["Skipped · health falling", "warn"], filtered: ["Skipped · too jumpy or stretched", "neutral"], locked: ["Skipped · upper circuit lock", "neutral"], no_slot: ["Skipped · slots full", "neutral"],
   holding: ["Bot already in it", "neutral"], pending: ["Buy at next open", "good"], no_data: ["No data", "neutral"], no_cash: ["No cash", "neutral"]
 };
 function kpiTiles(el, tiles) { el.innerHTML = tiles.map(([l, v, n]) => `<div class="card kpi"><div class="label">${l}</div><div class="value">${v}</div><div class="note">${n}</div></div>`).join(""); }
@@ -505,7 +505,7 @@ function botTable() {
     chips: [
       {k: "taken", l: "Bot bought", f: t => t.status === "taken"},
       {k: "open", l: "Still open", f: t => t.status === "taken" && !t.exit_date},
-      {k: "skipped", l: "Skipped", f: t => ["weak_market", "falling_market", "no_slot"].includes(t.status)},
+      {k: "skipped", l: "Skipped", f: t => ["weak_market", "falling_market", "filtered", "locked", "no_slot"].includes(t.status)},
       {k: "all", l: "All signals", f: () => true}],
     cols: [{h: "Signal", sort: "date"}, {h: "Stock", sort: "sym"}, {h: "Health", num: 1, sort: "health"}, {h: "Result"}, {h: "Entry date", sort: "entry"}, {h: "Buy", num: 1},
       {h: "Exit date", sort: "exit"}, {h: "Sell / now", num: 1}, {h: "Return", num: 1, sort: "ret"}, {h: "Days", num: 1, sort: "days"}, {h: "Why it ended"}],
@@ -550,7 +550,8 @@ function drawChart() {
   dChart.addLineSeries({color: css("--ema"), lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false})
     .setData(b.d.map((d, k) => ({time: d, value: b.e[k]})));
   const entry = t.entry ?? t.entry_price, ret = t.ret ?? t.pnl_pct;
-  const k0 = raw.d.indexOf(t.entry_date), scale = k0 >= 0 && entry ? raw.o[k0] / entry : 1;
+  const atClose = t.at_close || (t.signal && t.signal === t.entry_date);
+  const k0 = raw.d.indexOf(t.entry_date), scale = k0 >= 0 && entry ? (atClose ? raw.c[k0] : raw.o[k0]) / entry : 1;
   const mk = [];
   if (t.signal || t.signal_date) mk.push({time: T(t.signal || t.signal_date), position: "belowBar", color: css("--accent"), shape: "arrowUp", text: ""});
   if (t.entry_date) mk.push({time: T(t.entry_date), position: "belowBar", color: css("--accent"), shape: "circle", text: "buy " + px(entry)});
@@ -722,8 +723,8 @@ function showView(me) {
 $("#tabBot").onclick = () => showView(false); $("#tabMe").onclick = () => showView(true);
 function foot() {
   const r = D.rules, s = D.stats;
-  $("#foot").innerHTML = `<b>Rules:</b> buy the day after an STR100 signal only when market health is ${r.health_min}%+${r.rising_avg ? ` and not below its ${r.rising_avg}-day average` : ""} · max ${r.slots} stocks, capital ÷ ${r.slots} each, calmest candle first · stop loss ${r.stop}% · from day ${r.trail_after} sell on a close below the 20 day average · sell after ${r.max_hold} days.<br>
-    ${s.signals} signals so far: ${s.skipped_weak} skipped for weak market, ${s.skipped_falling ?? 0} because health was falling, ${s.skipped_slot} because slots were full.<br>
+  $("#foot").innerHTML = `<b>Rules:</b> buy before the close on the day of an STR100 signal (3:07 pm alert) only when market health is ${r.health_min}%+${r.rising_avg ? ` and not below its ${r.rising_avg}-day average` : ""} · skip stocks swinging over 8.5% a day, over 50% above the 20 day average, or locked at the upper circuit · max ${r.slots} stocks, capital ÷ ${r.slots} each, calmest candle first · stop loss ${r.stop}% · from day ${r.trail_after} sell on a close below the 20 day average · sell after ${r.max_hold} days.<br>
+    ${s.signals} signals so far: ${s.skipped_weak} skipped for weak market, ${s.skipped_falling ?? 0} because health was falling, ${s.skipped_filtered ?? 0} too jumpy, stretched or locked, ${s.skipped_slot} because slots were full.<br>
     Bot results are <b>simulated</b>. Past results don't promise future returns. Not financial advice. Data: Chartink. Charts: TradingView Lightweight Charts.`;
 }
 fetch("data.json?v=" + Date.now()).then(r => r.json()).then(d => {
