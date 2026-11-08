@@ -110,13 +110,14 @@ const setKey = v => { try { v ? localStorage.setItem(KEY, v) : localStorage.remo
 
 function parseOrders() {
   const h = location.hash.replace(/^#/, "");
-  const out = { orders: [], date: null };
+  const out = { orders: [], date: null, regular: false };
   if (!h) return out;
   for (const part of h.split("&")) {
     const i = part.indexOf("=");
     if (i < 0) continue;
     const k = part.slice(0, i), v = part.slice(i + 1);
     if (k === "d" && /^\d{4}-\d{2}-\d{2}$/.test(v)) out.date = v;
+    if (k === "r" && v === "1") out.regular = true;
     if (k === "o") {
       for (const item of v.split(",")) {
         let s;
@@ -152,7 +153,7 @@ function showStatus() {
 }
 
 function render() {
-  const { orders, date } = parseOrders();
+  const { orders, date, regular } = parseOrders();
   const key = getKey();
   if (!orders.length) {
     if (!HAS_STATUS) $("#empty").classList.remove("hidden");
@@ -161,7 +162,7 @@ function render() {
   }
   if (date) {
     const d = new Date(date + "T00:00:00");
-    if (!isNaN(d)) $("#sub").textContent = "Signals from " + d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }) + " · tap once, then confirm in Kite";
+    if (!isNaN(d)) $("#sub").textContent = (regular ? "Buy now · signals from " : "Signals from ") + d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" }) + " · tap once, then confirm in Kite";
   }
   $("#list").innerHTML = "";
   for (const o of orders) {
@@ -170,6 +171,10 @@ function render() {
     const b = document.createElement("span"); b.className = "qty"; b.textContent = o.qty + " shares";
     li.append(a, b); $("#list").append(li);
   }
+  $("#regular").checked = regular;
+  $("#orders .note").textContent = regular
+    ? "Regular market orders. They buy right now at the live price (before 3:25 pm)."
+    : "After-market orders (AMO). They buy at the 9:15 opening price.";
   $("#orders").classList.remove("hidden");
   $("#setup").classList.toggle("hidden", !!key);
   $("#go").disabled = !key;
