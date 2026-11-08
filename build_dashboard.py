@@ -78,6 +78,8 @@ def simulate(health, signals, bars_by_sym, nifty, capital=CAPITAL):
                     t["status"] = "holding"
                 elif (t.get("health") or 0) < S.HEALTH_MIN:
                     t["status"] = "weak_market"
+                elif not S.can_buy(health, prev):
+                    t["status"] = "falling_market"
                 elif "entry" not in t:
                     t["status"] = "pending"
                 elif len(open_pos) >= S.MAX_POSITIONS:
@@ -144,6 +146,7 @@ def simulate(health, signals, bars_by_sym, nifty, capital=CAPITAL):
         best_ret=max(t["ret"] for t in closed) if closed else None,
         max_dd=r2(100 * dd), signals=len(trades),
         skipped_weak=sum(t["status"] == "weak_market" for t in trades),
+        skipped_falling=sum(t["status"] == "falling_market" for t in trades),
         skipped_slot=sum(t["status"] == "no_slot" for t in trades),
         realized=r2(sum(t.get("pnl") or 0 for t in closed)),
         unrealized=r2(sum(t.get("pnl") or 0 for t in open_pos.values())),
@@ -244,7 +247,7 @@ def build(ck):
     last = max(h)
     data = dict(
         updated=datetime.now(IST).strftime("%Y-%m-%d %H:%M IST"),
-        rules=dict(health_min=S.HEALTH_MIN, stop=S.STOP_PCT, trail_after=S.TRAIL_AFTER,
+        rules=dict(health_min=S.HEALTH_MIN, rising_avg=S.RISING_AVG, stop=S.STOP_PCT, trail_after=S.TRAIL_AFTER,
                    max_hold=S.MAX_HOLD, slots=S.MAX_POSITIONS),
         today=dict(date=last, above=h[last][0], universe=h[last][1], pct=h[last][2],
                    signals=signals.get(last, [])),
