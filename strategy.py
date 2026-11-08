@@ -1,8 +1,9 @@
 """
 Pure trading rules. No internet, no Telegram. Easy to test.
 
-Rules (from the backtest, Mar to Nov 2026):
-  BUY   : STR100 signal on a day when Market Health >= 50%. Buy next morning at open.
+Rules (from the backtest, Mar to Nov 2026, rising rule from the 10-year test, Nov 2026):
+  BUY   : STR100 signal on a day when Market Health >= 50% AND health is not below its own
+          average of the last 10 days (market getting better, not worse). Buy next morning at open.
   RANK  : When there are more signals than free slots, buy the "calmest" candle first
           (smallest (high - low) / close on the signal day).
   SIZE  : 10% of capital per stock, max 10 stocks.
@@ -13,6 +14,7 @@ Rules (from the backtest, Mar to Nov 2026):
 """
 
 HEALTH_MIN = 50.0
+RISING_AVG = 10      # health must also be >= its average of the previous 10 days (0 = off)
 STOP_PCT = 10.0
 TRAIL_AFTER = 10
 MAX_HOLD = 40
@@ -105,7 +107,23 @@ def evaluate_position(adj, entry_date, entry_price_raw):
     return res
 
 
-def backtest(signals, health, bars_by_symbol, health_min=HEALTH_MIN):
+def health_avg(health, d, n=None):
+    """Average market health of the n days before d. health: {date: pct}."""
+    n = RISING_AVG if n is None else n
+    ds = sorted(x for x in health if x < d)[-n:] if n else []
+    return sum(health[x] for x in ds) / len(ds) if ds else None
+
+
+def can_buy(health, d, health_min=HEALTH_MIN, n=None):
+    """New buys allowed on day d? Health >= health_min and not below its n-day average."""
+    p = health.get(d)
+    if p is None or p < health_min:
+        return False
+    a = health_avg(health, d, n)
+    return a is None or p >= a
+
+
+def backtest(signals, health, bars_by_symbol, health_min=HEALTH_MIN, rising=None):
     """Signal-by-signal backtest (no slot limit), one open trade per stock.
     signals: list of (date, symbol) in date order.
     Returns list of trades."""
@@ -113,7 +131,7 @@ def backtest(signals, health, bars_by_symbol, health_min=HEALTH_MIN):
     busy_until = {}
     trades = []
     for d, s in signals:
-        if health.get(d, 0) < health_min or s not in bars_by_symbol:
+        if not can_buy(health, d, health_min, rising) or s not in bars_by_symbol:
             continue
         adj = adj_cache.setdefault(s, adjust_splits(bars_by_symbol[s]))
         if d not in adj["d"]:
