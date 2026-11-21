@@ -1,0 +1,38 @@
+name: Update market view
+
+# Refreshes market.json (the Market page) every 15 minutes while NSE is open.
+# 9:15 am to 3:30 pm IST = 03:45 to 10:00 UTC, Monday to Friday.
+# GitHub can start scheduled runs a few minutes late; that is normal.
+on:
+  schedule:
+    - cron: "45 3 * * 1-5"
+    - cron: "*/15 4-9 * * 1-5"
+    - cron: "0 10 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dashboard
+  cancel-in-progress: false
+
+jobs:
+  market:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python market_build.py
+      - name: Publish
+        run: |
+          git config user.name "str100-dashboard"
+          git config user.email "str100-dashboard@users.noreply.github.com"
+          git add market.json
+          git diff --cached --quiet || git commit -m "market $(date -u +%FT%H:%M)"
+          git pull --rebase --autostash || true
+          git push
