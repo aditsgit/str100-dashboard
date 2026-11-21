@@ -167,6 +167,10 @@ dialog::backdrop{background:rgba(0,0,0,.45)}
       <h2>What the numbers say</h2><div class="h2sub">Worked out from every trade so far. Updates daily.</div>
       <div class="grid insights" id="botIns"></div>
     </section>
+    <section id="shadowSec" class="hidden">
+      <h2>Shadow test: tightest base first</h2><div class="h2sub">Research only. Same rules, but when there are more signals than free slots, this version picks the stock with the tightest 10-day base instead of the calmest candle. Starting money ₹5,00,000, before charges. It never sends alerts or changes the bot.</div>
+      <div class="card" id="shadowBody"></div>
+    </section>
     <section>
       <h2>Bot's open paper trades</h2><div class="h2sub">Not your stocks. These are trades the rules would still be in today if you had followed every signal. Tap a card for the chart.</div>
       <div class="grid cards" id="openCards"></div>
@@ -389,7 +393,26 @@ function renderBot() {
   $("#botIntro").textContent = `What happens if every signal is handled exactly by the rules, starting with ${inr(SET.cap)}${SET.fees ? ", after Zerodha charges" : ""}. Simulated, not real orders.`;
   botKpis(); equityChart(); botInsights();
   openCards($("#openCards"), Object.assign(D.trades.map((t, i) => [t, i]).filter(([t]) => t.status === "taken" && !t.exit_date), {paper: true}), i => openChart(D.trades[i], D.bars));
-  botTable(); foot(); feeLine();
+  botTable(); foot(); feeLine(); shadowCard();
+}
+function shadowCard() {
+  const X = D.shadow, sec = $("#shadowSec");
+  if (!X || !X.replay) { sec.classList.add("hidden"); return; }
+  sec.classList.remove("hidden");
+  const row = (label, a, b) => `<tr><td>${label}</td><td>${a}</td><td>${b}</td></tr>`;
+  const block = (title, L, S) => !L ? `<p><b>${title}</b>: starts ${nd(X.start)}. No signals yet.</p>` :
+    `<p><b>${title}</b></p><table style="width:100%;border-collapse:collapse"><thead><tr><th style="text-align:left"></th><th style="text-align:left">Live rule</th><th style="text-align:left">Shadow rule</th></tr></thead><tbody>` +
+    row("Return", `<span class="${sign(L.ret)}">${pct(L.ret)}</span>`, `<span class="${sign(S.ret)}">${pct(S.ret)}</span>`) +
+    row("Worst fall", pct(L.max_dd), pct(S.max_dd)) +
+    row("Closed trades", L.closed, S.closed) +
+    row("Win rate", L.win_rate == null ? "–" : L.win_rate.toFixed(0) + "%", S.win_rate == null ? "–" : S.win_rate.toFixed(0) + "%") +
+    `</tbody></table>`;
+  const diffs = (X.differ || []).slice(-5).reverse().map(d => `<li>${nd(d.date)}: live bought <b>${d.live.join(", ") || "nothing"}</b>, shadow bought <b>${d.shadow.join(", ") || "nothing"}</b></li>`).join("");
+  $("#shadowBody").innerHTML =
+    block(`Forward test since ${nd(X.start)} (the real test)`, X.forward?.live, X.forward?.shadow) +
+    block(`Replay since ${nd(X.replay.first)} (for reference)`, X.replay.live, X.replay.shadow) +
+    `<p class="h2sub">The two rules picked different stocks on <b>${X.differ_days}</b> day${X.differ_days == 1 ? "" : "s"}. A fair verdict needs many such days, so expect this to take months.</p>` +
+    (diffs ? `<ul>${diffs}</ul>` : "");
 }
 function capChips() { document.querySelectorAll("[data-cap]").forEach(b => b.setAttribute("aria-pressed", +b.dataset.cap === SET.cap)); }
 function rerender() { capChips(); if (D) renderBot(); if (P) renderMe(); feeLine(); }

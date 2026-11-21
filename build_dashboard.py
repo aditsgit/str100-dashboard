@@ -19,13 +19,27 @@ from chartink import Chartink, STR_CLAUSE, IST
 CAPITAL = float(os.environ.get("CAPITAL", "500000") or 500000)
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data.json")
 
+# Shadow test (research, Nov 2026): same rules, but when signals > free slots, pick the stock with
+# the TIGHTEST 10-day base first instead of the calmest candle. Paper only, never touches the bot.
+# Forward test counts from this date; earlier days are a replay.
+SHADOW_START = "2026-11-23"
+
 
 def r2(x):
     return None if x is None else round(float(x), 2)
 
 
-def simulate(health, signals, bars_by_sym, nifty, capital=CAPITAL):
+def tight10(a, i, n=10):
+    """Range of the n days BEFORE bar i: (highest high - lowest low) / yesterday's close.
+    Smaller = tighter base = picked first by the shadow rule. 9 if not enough data."""
+    if i - n < 0 or not a["c"][i - 1]:
+        return 9.0
+    return (max(a["h"][i - n:i]) - min(a["l"][i - n:i])) / a["c"][i - 1]
+
+
+def simulate(health, signals, bars_by_sym, nifty, capital=CAPITAL, rank="calm"):
     """health {d: pct}, signals {d: [sym]}, bars_by_sym {sym: raw bars}, nifty raw bars.
+    rank: "calm" = live rule (calmest signal candle first), "tight" = shadow rule (tightest 10-day base first).
     Returns (trades, equity, stats)."""
     adj = {s: S.adjust_splits(b) for s, b in bars_by_sym.items()}
     sig_days = sorted(signals)
@@ -60,7 +74,7 @@ def simulate(health, signals, bars_by_sym, nifty, capital=CAPITAL):
                 trades.append(t)
                 continue
             i = a["d"].index(day)
-            t["range"] = S.candle_range(a, i)
+            t["range"] = S.candle_range(a, i) if rank == "calm" else tight10(a, i)
             todays.append((t, a, i))
         todays.sort(key=lambda x: x[0]["range"])
         for t, a, i in todays:
@@ -172,6 +186,42 @@ def pack_bars(raw, start_date):
     }
 
 
+def shadow_compare(health, signals, bars, nifty, start=SHADOW_START):
+    """Run live rule and shadow rule side by side. Never raises (returns None on error)."""
+    def brief(st):
+        keys = ("value", "ret", "closed", "open", "win_rate", "max_dd", "skipped_slot")
+        return {k: st.get(k) for k in keys}
+
+    def picks(trades):
+        out = {}
+        for t in trades:
+            if t["status"] == "taken":
+                out.setdefault(t["signal"], []).append(t["symbol"])
+        return out
+
+    try:
+        live_t, _, live_s = simulate(health, signals, bars, nifty, rank="calm")
+        sh_t, _, sh_s = simulate(health, signals, bars, nifty, rank="tight")
+        lp, sp = picks(live_t), picks(sh_t)
+        differ = []
+        for d in sorted(set(lp) | set(sp)):
+            a, b = sorted(lp.get(d, [])), sorted(sp.get(d, []))
+            if a != b:
+                differ.append(dict(date=d, live=[s for s in a if s not in b], shadow=[s for s in b if s not in a]))
+        fwd_sig = {d: v for d, v in signals.items() if d >= start}
+        fwd = None
+        if fwd_sig:
+            _, _, fl = simulate(health, fwd_sig, bars, nifty, rank="calm")
+            _, _, fs = simulate(health, fwd_sig, bars, nifty, rank="tight")
+            fwd = dict(live=brief(fl), shadow=brief(fs))
+        return dict(rule="Tightest 10-day base first (when signals > free slots)", start=start,
+                    replay=dict(live=brief(live_s), shadow=brief(sh_s), first=min(signals) if signals else None),
+                    forward=fwd, differ=differ[-30:], differ_days=len(differ))
+    except Exception as e:  # noqa  (the shadow test must never break the dashboard)
+        print("shadow failed:", e, file=sys.stderr)
+        return None
+
+
 HIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history.json")
 HIST_BARS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history_bars.json")
 
@@ -237,6 +287,7 @@ def build(ck):
     except Exception as e:  # noqa  (history must never break the dashboard)
         print("history save failed:", e, file=sys.stderr)
     trades, equity, stats = simulate(health, signals, bars, nifty)
+    shadow = shadow_compare(health, signals, bars, nifty)
 
     first_sig = {}
     for t in trades:
@@ -259,6 +310,7 @@ def build(ck):
         equity=equity,
         trades=trades,
         bars=chart_bars,
+        shadow=shadow,
     )
     with open(OUT, "w") as f:
         json.dump(data, f, separators=(",", ":"))
